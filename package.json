@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "三人实时联机斗地主",
+  "description": "三人经典、三人技能和四人经典实时联机斗地主",
   "engines": { "node": ">=22" },
   "scripts": {
     "start": "node server.js",
@@ -14,7 +14,8 @@
     "test:selection": "node test/selection.mjs",
     "test:skills": "node test/skills.mjs",
     "test:skill-effects": "node test/skill-effects.mjs",
-    "test:online": "node test/online.mjs"
+    "test:online": "node test/online.mjs",
+    "test:four": "node test/four.mjs"
   },
   "dependencies": { "express": "^5.1.0", "socket.io": "^4.8.1" },
   "devDependencies": { "@playwright/test": "^1.55.0", "socket.io-client": "^4.8.1" }

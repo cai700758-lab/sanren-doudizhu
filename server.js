@@ -5,7 +5,7 @@ import { networkInterfaces } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { Server } from 'socket.io';
-import { makeDeck, sortCards, classify, beats } from './lib/game.js';
+import { makeDeck, sortCards, classify, beats, MODES, modeRules } from './lib/game.js';
 import { chooseBotBid, chooseBotPlay } from './lib/bot.js';
 import { SKILLS, SKILL_IDS, applySkill, chooseSkillCard, resolveWildCards, wildHands, canUpgrade } from './lib/skills.js';
 
@@ -36,7 +36,7 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
   const log = (room, text) => { room.log.push(text); room.log = room.log.slice(-30); };
   function snapshot(room, me) {
     return {
-      code: room.code, mode: room.mode || 'classic', revision: room.revision, phase: room.phase, me: me.id,
+      code: room.code, mode: room.mode || 'classic', capacity: modeRules(room.mode).players, revision: room.revision, phase: room.phase, me: me.id,
       hostId: room.hostId, round: room.round, turnId: room.players[room.turn]?.id,
       landlordId: room.landlordId, highestBid: room.highestBid, multiplier: room.multiplier,
       deadline: room.deadline, actionAt: room.actionAt || 0, serverNow: Date.now(), bottom: room.landlordId ? room.bottom : [],
@@ -82,7 +82,7 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
             if (p.skill.choices) completeSkillChoice(room, p, p.skill.choices[0].id);
           }
           const table = {
-            selfId: p.id, landlordId: room.landlordId, lastPlay: room.lastPlay,
+            mode: room.mode, selfId: p.id, landlordId: room.landlordId, lastPlay: room.lastPlay,
             players: room.players.map(player => ({ id: player.id, count: player.hand.length })),
           };
           let cards = null;
@@ -102,17 +102,18 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
   }
   function deal(room, redeal = false) {
     stopTimer(room);
-    const deck = makeDeck();
+    const rules = modeRules(room.mode);
+    const deck = makeDeck(room.mode);
     for (let i = deck.length - 1; i > 0; i--) { const j = randomInt(i + 1); [deck[i], deck[j]] = [deck[j], deck[i]]; }
     if (!redeal) room.round++;
     room.dealId = (room.dealId || 0) + 1; room.playSequence = 0; room.tablePlays = {}; room.tablePasses = {};
-    room.nextCardId = 54; room.skillEvent = null; room.skillSequence = 0; room.skillEvents = [];
+    room.nextCardId = deck.length; room.skillEvent = null; room.skillSequence = 0; room.skillEvents = [];
     room.phase = 'bidding'; room.landlordId = null; room.lastPlay = null; room.result = null;
     room.highestBid = 0; room.bidderId = null; room.bidCount = 0; room.multiplier = 1; room.passes = 0;
-    room.bottom = deck.slice(51); room.turn = randomInt(3);
-    room.players.forEach((p, i) => { p.hand = sortCards(deck.slice(i * 17, i * 17 + 17)); p.ready = false; p.bid = null; p.lastAction = ''; p.playCount = 0; });
+    room.bottom = deck.slice(rules.players * rules.dealt); room.turn = randomInt(rules.players);
+    room.players.forEach((p, i) => { p.hand = sortCards(deck.slice(i * rules.dealt, (i + 1) * rules.dealt)); p.ready = false; p.bid = null; p.lastAction = ''; p.playCount = 0; });
     room.players.forEach(p => { p.skill = room.mode === 'skills' ? { id: SKILL_IDS[randomInt(SKILL_IDS.length)], used: false, choices: null } : null; });
-    log(room, redeal ? '三人都不叫，重新洗牌。' : `第 ${room.round} 局开始，轮流叫分。`);
+    log(room, redeal ? '所有人都不叫，重新洗牌。' : `第 ${room.round} 局开始，轮流叫分。`);
     schedule(room, dealDelayMs);
   }
   function bid(room, p, value, auto = false) {
@@ -122,7 +123,7 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
     log(room, `${p.name}${auto ? '超时，' : '：'}${p.lastAction}`);
     if (value) { room.highestBid = value; room.bidderId = p.id; }
     room.bidCount++;
-    if (value === 3 || room.bidCount === 3) {
+    if (value === 3 || room.bidCount === modeRules(room.mode).players) {
       if (!room.bidderId) return deal(room, true);
       room.landlordId = room.bidderId;
       room.turn = room.players.findIndex(player => player.id === room.landlordId);
@@ -131,7 +132,7 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
       room.phase = 'playing'; room.multiplier = room.highestBid;
       room.players.forEach(player => { player.lastAction = ''; });
       log(room, `${landlord.name}成为地主，先出牌。`);
-    } else room.turn = (room.turn + 1) % 3;
+    } else room.turn = (room.turn + 1) % modeRules(room.mode).players;
     schedule(room, actionDelayMs * 1.3);
   }
   function finish(room, winner) {
@@ -142,7 +143,7 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
     if (spring) room.multiplier *= 2;
     const deltas = room.players.map(p => {
       const won = (p === landlord) === landlordWon;
-      const delta = room.multiplier * (p === landlord ? 2 : 1) * (won ? 1 : -1);
+      const delta = room.multiplier * (p === landlord ? modeRules(room.mode).players - 1 : 1) * (won ? 1 : -1);
       p.score += delta; p.ready = Boolean(p.bot);
       return { id: p.id, delta };
     });
@@ -172,11 +173,11 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
   function play(room, p, ids, auto = false, assignments = {}) {
     if (room.phase !== 'playing' || room.players[room.turn] !== p) fail('还没轮到你出牌。');
     if (p.skill?.choices) fail('请先完成技能选牌。');
-    if (!Array.isArray(ids) || !ids.length || ids.length > (room.mode === 'skills' ? 25 : 20) || new Set(ids).size !== ids.length) fail('请选择要出的牌。');
+    if (!Array.isArray(ids) || !ids.length || ids.length > modeRules(room.mode).maxHand || new Set(ids).size !== ids.length) fail('请选择要出的牌。');
     let cards = ids.map(id => p.hand.find(c => c.id === id));
     if (cards.some(c => !c)) fail('只能打出自己手中的牌。');
     cards = resolveWildCards(cards, assignments);
-    const combo = classify(cards);
+    const combo = classify(cards, room.mode);
     if (!combo) fail('这些牌不能组成有效牌型，请重新选择。');
     if (!beats(combo, room.lastPlay?.combo)) fail('这手牌压不过桌面上的牌。');
     p.hand = p.hand.filter(c => !ids.includes(c.id)); p.playCount++;
@@ -188,7 +189,7 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
     if (['bomb', 'rocket'].includes(combo.type)) room.multiplier *= 2;
     log(room, `${p.name}${auto ? '超时，自动打出' : '打出'}${combo.name}${p.hand.length <= 2 ? `，剩 ${p.hand.length} 张` : ''}`);
     if (!p.hand.length) return finish(room, p);
-    room.turn = (room.turn + 1) % 3;
+    room.turn = (room.turn + 1) % modeRules(room.mode).players;
     schedule(room, actionDelayMs * (['bomb', 'rocket'].includes(combo.type) ? 1.8 : 1));
   }
   function pass(room, p, auto = false) {
@@ -198,8 +199,8 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
     p.lastAction = auto ? '超时 · 不出' : '不出'; log(room, `${p.name}：${p.lastAction}`);
     delete room.tablePlays[p.id];
     room.tablePasses[p.id] = { sequence: ++room.playSequence, auto };
-    room.passes++; room.turn = (room.turn + 1) % 3;
-    if (room.passes === 2) {
+    room.passes++; room.turn = (room.turn + 1) % modeRules(room.mode).players;
+    if (room.passes === modeRules(room.mode).players - 1) {
       room.turn = room.players.findIndex(player => player.id === room.lastPlay.playerId);
       room.lastPlay = null; room.passes = 0;
       room.tablePlays = {};
@@ -225,7 +226,7 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
     }
   }
   function startIfReady(room) {
-    if (room.players.length === 3 && room.players.every(player => player.ready && (player.bot || player.socketId))) deal(room);
+    if (room.players.length === modeRules(room.mode).players && room.players.every(player => player.ready && (player.bot || player.socketId))) deal(room);
   }
   io.on('connection', socket => {
     const token = socket.handshake.auth?.token;
@@ -261,7 +262,7 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
       if (p.roomCode) fail('请先离开当前房间。');
       if (rooms.size >= 1000) fail('房间已满，请稍后再试。');
       setName(data);
-      if (data.mode !== undefined && !['classic', 'skills'].includes(data.mode)) fail('请选择经典模式或技能模式。');
+      if (data.mode !== undefined && !Object.hasOwn(MODES, data.mode)) fail('请选择有效的游戏模式。');
       let code; do { code = String(randomInt(100000, 1000000)); } while (rooms.has(code));
       p.roomCode = code; p.hand = []; p.ready = false; p.score = 0; p.bid = null; p.lastAction = '';
       const room = { code, hostId: p.id, players: [p], phase: 'waiting', revision: 0, round: 0, turn: 0, landlordId: null, bottom: [], highestBid: 0, multiplier: 1, lastPlay: null, result: null, log: ['房间已创建，把邀请链接发给朋友吧。'], updatedAt: Date.now() };
@@ -275,8 +276,8 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
       const room = rooms.get(code);
       if (!room) fail('找不到这个房间，请检查房间码。');
       if (active(room)) fail('这局已经开始，请等待下一局。');
-      const replacement = room.players.length >= 3 ? room.players.find(player => player.bot) : null;
-      if (room.players.length >= 3 && !replacement) fail('房间已坐满 3 人。');
+      const replacement = room.players.length >= modeRules(room.mode).players ? room.players.find(player => player.bot) : null;
+      if (room.players.length >= modeRules(room.mode).players && !replacement) fail(`房间已坐满 ${modeRules(room.mode).players} 人。`);
       setName(data);
       if (replacement) leave(replacement);
       p.roomCode = room.code; p.hand = []; p.ready = false; p.score = 0; p.bid = null; p.lastAction = '';
@@ -288,9 +289,9 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
       const room = getRoom();
       if (room.hostId !== p.id) fail('只有房主可以添加机器人。');
       if (active(room)) fail('请在本局结束后添加机器人。');
-      if (room.players.length >= 3) fail('座位已满。');
-      const names = ['小麦', '豆豆'];
-      while (room.players.length < 3) {
+      if (room.players.length >= modeRules(room.mode).players) fail('座位已满。');
+      const names = ['小麦', '豆豆', '芽芽'];
+      while (room.players.length < modeRules(room.mode).players) {
         const name = names.find(name => !room.players.some(player => player.name === name)) || '机器人';
         room.players.push({ id: randomBytes(8).toString('hex'), name, bot: true, socketId: null, roomCode: room.code, hand: [], score: 0, ready: true, bid: null, lastAction: '', playCount: 0 });
         log(room, `${name}（机器人）加入房间。`);

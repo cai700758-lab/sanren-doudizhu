@@ -899,6 +899,11 @@ body.in-game { background: var(--color-table-room); color: var(--color-table-tex
 .fx-launcher { position: absolute; width: 130px; height: 100px; top: 15px; animation: combo-launch 1500ms cubic-bezier(.4,0,.3,1) both; }
 .fx-launcher-one { left: calc(50% - 100px); }
 .fx-launcher-two { left: calc(50% - 28px); animation-delay: 130ms; }
+.fx-launch-four .fx-launcher { width: 95px; }
+.fx-launch-four .fx-launcher-one { left: calc(50% - 112px); }
+.fx-launch-four .fx-launcher-two { left: calc(50% - 70px); }
+.fx-launcher-three { left: calc(50% - 28px); animation-delay: 260ms; }
+.fx-launcher-four { left: calc(50% + 14px); animation-delay: 390ms; }
 .fx-rocket { width: 100%; height: 100%; }
 .fx-flame { transform-origin: 80px 65px; animation: combo-flame 260ms ease-in-out 5 alternate; }
 .fx-launch-glow { position: absolute; bottom: 0; left: 15%; width: 70%; height: 40px; background: radial-gradient(ellipse, #ffc94d90, transparent 70%); animation: combo-sweep 1500ms ease-in-out both; }
@@ -944,7 +949,7 @@ body.in-game { background: var(--color-table-room); color: var(--color-table-tex
 .in-game .selection-undo { display: inline; min-height: 0; padding: 0 5px; margin-left: 3px; border: 0; border-radius: 3px; background: transparent; color: var(--color-table-gold); box-shadow: none; font: inherit; font-weight: 800; line-height: inherit; text-decoration: underline; text-underline-offset: 3px; }
 
 /* Hallmark · pre-emit critique: P4 H4 E4 S5 R5 V4 · existing playful theme */
-.mode-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-sm); margin: 0 0 var(--space-lg); }
+.mode-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0 0 var(--space-lg); }
 .mode-picker button { display: flex; align-items: center; justify-content: center; gap: var(--space-sm); min-width: 0; min-height: 52px; padding: 10px 6px; border: 2px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-paper); color: var(--color-muted); box-shadow: 0 3px 0 var(--color-line); font: 750 13px var(--font-display); white-space: nowrap; }
 .mode-picker button span { font-size: 22px; }
 .mode-picker button[aria-pressed="true"] { border-color: var(--color-accent-edge); background: var(--color-mint); color: var(--color-accent-text); box-shadow: 0 3px 0 var(--color-accent-edge); }
@@ -1055,4 +1060,53 @@ body.in-game { background: var(--color-table-room); color: var(--color-table-tex
   .in-game.skills-mode .arena .opponents { margin-top: 2px; }
   .in-game.skills-mode .arena { padding-block: 3px 2px; }
   .in-game.skills-mode .room-heading { margin-bottom: 2px; }
+}
+
+/* Four seats retain fixed play zones, including when all three opponents pass. */
+.mode-picker button { gap: 4px; }
+.mode-picker button span { font-size: 18px; }
+.character-3 .character-shirt { fill: var(--color-character-coral); }
+.four-mode .arena .opponents { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: 34px 1fr; height: 178px; gap: 4px 12px; }
+.four-mode .bottom-area { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.four-mode .bottom-cards { margin: 0; gap: 3px; }
+.four-mode .bottom-cards .playing-card { width: 24px; height: 32px; font-size: 13px; }
+.four-mode #left-player { grid-column: 1; grid-row: 2; }
+.four-mode #top-player { grid-column: 2; grid-row: 2; }
+.four-mode #right-player { grid-column: 3; grid-row: 2; }
+.four-mode #top-player .player-info, .four-mode #top-player .seat-status { justify-content: center; }
+.four-mode #top-player .opponent-hand { margin-inline: auto; }
+.four-mode .opponent-plays { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (600px <= width < 1000px) and (height < 1000px) {
+  .in-game.four-mode .arena .opponents { height: 134px; min-height: 134px; margin-top: 6px; }
+  .in-game.four-mode .arena .player-slot .avatar { width: 46px; height: 50px; }
+}
+@media (height < 850px) and (width >= 600px) {
+  .four-mode .arena .opponents { height: 152px; }
+  .four-mode .player-slot .avatar { width: 50px; height: 54px; }
+}
+@media (width < 600px) {
+  .mode-picker button { font-size: 11px; padding-inline: 2px; gap: 3px; }
+  .mode-picker button span { font-size: 16px; }
+  .four-mode .arena .opponents { height: 144px; grid-template-rows: 26px 1fr; gap: 2px 6px; }
+  .four-mode .bottom-area { gap: 6px; }
+  .four-mode .bottom-cards { gap: 2px; }
+  .four-mode .bottom-cards .playing-card { width: 21px; height: 26px; font-size: 11px; }
+  .in-game.four-mode .arena .player-slot .player-info { flex-direction: column; align-items: center; gap: 1px; text-align: center; }
+  .in-game.four-mode .arena .player-slot .avatar { width: 34px; height: 37px; }
+  .four-mode .player-slot .player-role { justify-content: center; flex-wrap: nowrap; }
+  .four-mode .player-slot .player-name { font-size: 12px; line-height: 15px; max-width: 80px; }
+  .four-mode .player-slot .player-role { margin-top: 1px; }
+  .four-mode .player-slot .role-tag { font-size: 10px; }
+  .four-mode .player-slot .opponent-hand { height: 22px; min-height: 22px; padding-top: 0; margin: 2px auto 0; }
+  .in-game.four-mode .player-slot .facedown-card, .in-game.four-mode .player-slot .facedown-card::before { height: 22px; }
+  .in-game.four-mode .player-slot .facedown-card::after { height: 14px; }
+  .four-mode .player-slot .seat-status { justify-content: center; height: 18px; min-height: 18px; margin-top: 2px; gap: 3px; }
+  .four-mode .opponent-plays { gap: 6px; }
+}
+@media (width < 600px) and (height < 760px) {
+  .in-game.four-mode .site-header { min-height: 44px; padding-block: 0; }
+  .in-game.four-mode .game-shell { padding-block: 0; }
+  .in-game.four-mode .arena { padding-block: 3px 0; }
+  .four-mode .arena .opponents { height: 140px; margin-top: 2px; }
+  .in-game.four-mode .arena .player-slot .avatar { width: 30px; height: 32px; }
 }

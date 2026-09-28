@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { io } from 'socket.io-client';
 import { canUpgrade } from '../lib/skills.js';
+import { modeRules } from '../lib/game.js';
 
 const input = process.argv[2] || process.env.GAME_URL;
 if (!input) throw new Error('Usage: npm run test:online -- https://YOUR-GAME.onrender.com');
@@ -18,7 +19,8 @@ async function until(predicate, timeout = 20000) {
 }
 const response = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(90000) });
 assert.equal(response.status, 200); assert.equal((await response.json()).ok, true);
-for (const mode of ['classic', 'skills']) {
+for (const mode of ['classic', 'skills', 'four']) {
+  const rules = modeRules(mode);
   const clients = [];
   async function connect(transports, token) {
     const client = { state: null, socket: io(origin, { transports, auth: { token }, autoConnect: false, timeout: 20000 }) };
@@ -42,14 +44,15 @@ for (const mode of ['classic', 'skills']) {
   try {
     // Verify native WebSocket, HTTP polling and the default upgrade path independently.
     let players = [await connect(['websocket']), await connect(['polling']), await connect(['polling', 'websocket'])];
+    if (rules.players === 4) players.push(await connect(['websocket']));
     await send(players[0], 'create', { name: '联机检测甲', mode });
     const code = players[0].state.code;
-    for (let i = 1; i < 3; i++) await send(players[i], 'join', { name: `联机检测${i === 1 ? '乙' : '丙'}`, code });
-    await until(() => players.every(client => client.state?.players.length === 3));
+    for (let i = 1; i < rules.players; i++) await send(players[i], 'join', { name: `联机检测${i}`, code });
+    await until(() => players.every(client => client.state?.players.length === rules.players));
     for (const player of players) await send(player, 'ready', { ready: true });
     await until(() => players.every(client => client.state?.phase === 'bidding')); await settle(players);
     for (const client of players) {
-      assert.equal(client.state.players.find(p => p.id === client.id).hand.length, 17);
+      assert.equal(client.state.players.find(p => p.id === client.id).hand.length, rules.dealt);
       assert.ok(client.state.players.filter(p => p.id !== client.id).every(p => p.hand === undefined));
     }
     let actor = players.find(client => client.id === players[0].state.turnId);
@@ -80,7 +83,7 @@ for (const mode of ['classic', 'skills']) {
     actor = players.find(client => client.id === players[0].state.turnId);
     await turnReady(actor); await send(actor, 'pass');
     await until(() => players.every(client => client.state?.tablePasses?.[actor.id]));
-    console.log(`${mode}: three clients, WebSocket + polling, deal, play, pass, privacy and reconnect passed.`);
+    console.log(`${mode}: ${rules.players} clients, WebSocket + polling, deal, play, pass, privacy and reconnect passed.`);
   } finally {
     for (const client of clients) {
       if (client.socket.connected && client.state) {

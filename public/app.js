@@ -1,4 +1,4 @@
-import { classify, beats, findHint, findClosestSelection, rankLabel } from '/game.js';
+import { classify as classifyCards, beats, findHint as hintCards, findClosestSelection as closestCards, rankLabel, MODES, modeRules } from '/game.js';
 import { tableCues } from './table-cues.js';
 import { createTableSound } from './sound.js';
 import { comboEffect, comboArtwork } from './combo-effects.js';
@@ -61,7 +61,11 @@ $('#table-button').addEventListener('click', () => {
 });
 let state = null, selected = new Set(), busy = false, connected = false, clockOffset = 0, toastTimer;
 let selectionAssistTimer, selectionAdjustment = null;
-let roomMode = storage.get('sanren-mode', true) === 'skills' ? 'skills' : 'classic';
+let roomMode = Object.hasOwn(MODES, storage.get('sanren-mode', true)) ? storage.get('sanren-mode', true) : 'classic';
+const classify = cards => classifyCards(cards, state?.mode);
+const findHint = (cards, target) => hintCards(cards, target, state?.mode);
+const findClosestSelection = (cards, target) => closestCards(cards, target, state?.mode);
+const capacity = () => modeRules(state?.mode).players;
 let wildRanks = {};
 const skillEffects = createSkillEffects({ reducedMotion });
 const skillUI = createSkillUI({ getState: () => state, send, cardHTML, getSelected: () => selected, getWildRank: id => wildRanks[id] ?? 15,
@@ -73,8 +77,12 @@ for (const button of document.querySelectorAll('[data-mode]')) {
   button.addEventListener('click', () => {
     roomMode = button.dataset.mode; storage.set('sanren-mode', roomMode, true);
     for (const item of document.querySelectorAll('[data-mode]')) item.setAttribute('aria-pressed', String(item === button));
+    $('.mode-badge').textContent = `${modeRules(roomMode).players} 人`;
   });
 }
+$('.mode-badge').textContent = `${modeRules(roomMode).players} 人`;
+$('#rules-dialog .rules-content').insertAdjacentHTML('afterbegin', '<h3>三人经典</h3>');
+$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', '<h3>四人经典</h3><p>两副牌共 108 张，每人 25 张，地主拿 8 张底牌后共 33 张。一位地主对抗三位农民，任一农民出完即为农民阵营获胜。全部准备才开局；四人都不叫则重新发牌，连续三家不出后由上一位出牌者领出。</p><p>可出单张、对子、三张、三带二、顺子、连对、飞机及飞机带对子。不能三带一、飞机带单或四带二；飞机翅膀为不同点数的对子，不能复用主体点数。两个小王或两个大王可作对子，一小王加一大王不能出。四至八张同点数为炸弹，先比张数再比点数；两小王加两大王是最大的四王炸。2 和王不能进入顺子、连对或飞机主体。</p><p>本游戏四人计分：叫分为初始倍数，每个炸弹、四王炸、春天各翻倍；地主得失三份积分，每位农民一份。八张炸弹和四王炸不会直接判胜，没有农民出炸数量限制。四人经典不分配技能。</p>');
 $('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', `<h3>技能模式</h3><p>建房时选择技能模式。每人发牌时随机获得一个技能，可能与其他玩家相同。只能在自己的出牌回合使用，每局一次；使用后继续出牌，回合计时不重置。</p><ul>${Object.values(SKILLS).map(skill => `<li><strong>${skill.name}</strong>：${skill.description}</li>`).join('')}</ul><p>随机牌来自完整的 54 张牌，包含大小王，可以与已有牌重复。万能牌可替代大小王，仍需组成合法牌型；五张同点数不算炸弹。赠牌或弃牌清空自己的手牌时直接获胜。三选一的候选牌仅本人可见，超时会选第一张并继续托管。</p>`);
 const initialCode = new URLSearchParams(location.search).get('room');
 if (/^\d{6}$/.test(initialCode || '')) $('#room-code').value = initialCode;
@@ -190,16 +198,18 @@ function roleHTML(p) {
   return `<span class="role-tag role-${type}">${icon(type)}${labels[type]}</span>${p.bot ? `<span class="role-tag role-bot">${icon('bot')}人机</span>` : ''}`;
 }
 function characterHTML(p) {
-  const variant = Math.max(0, state.players.findIndex(player => player.id === p.id)) % 3;
+  const variant = Math.max(0, state.players.findIndex(player => player.id === p.id)) % 4;
   const hair = [
     '<path class="character-hair" d="M22 45V32C22 10 73 8 75 34L73 48H66L62 31C52 38 39 28 31 39L30 48Z"/><circle class="character-hair" cx="29" cy="25" r="10"/><circle class="character-hair" cx="43" cy="20" r="12"/>',
     '<circle class="character-hair" cx="66" cy="16" r="12"/><path class="character-hair" d="M21 67V34C21 10 76 9 76 36V68L64 70 28 70Z"/>',
     '<path class="character-hair" d="M23 47V32C23 15 73 15 74 35V49H65L29 51Z"/>',
+    '<path class="character-hair" d="M22 46V29Q25 9 48 15L65 9 63 18Q79 20 75 48L67 46 60 31 32 34 29 49Z"/>',
   ][variant];
   const accessory = [
     '<g class="character-lines"><rect x="29" y="40" width="17" height="13" rx="5"/><rect x="51" y="40" width="17" height="13" rx="5"/><path d="M46 45H51"/></g>',
     '<path class="character-hair" d="M24 37C30 19 55 15 68 29L73 43C61 39 54 30 50 26 46 39 33 43 24 42Z"/><circle class="character-earring" cx="26" cy="57" r="3"/><circle class="character-earring" cx="71" cy="57" r="3"/>',
     '<path class="character-cap" d="M21 32C22 7 73 7 76 32Z"/><path class="character-cap-brim" d="M19 31Q49 22 81 33L81 39Q46 34 19 38Z"/>',
+    '<path class="character-lines" d="M23 40Q18 40 18 49v8m56-17q6 0 6 9v8M18 52h7m48 0h7"/><path class="character-hair" d="m27 33 8-16 7 10 10-14 6 14 9-8 4 19Z"/>',
   ][variant];
   const crown = p.id === state.landlordId ? '<path class="character-crown" d="M36 17 32 3 43 9 49 0 55 9 66 3 62 17Z"/>' : '';
   return `<svg class="character character-${variant}" viewBox="0 0 96 104" aria-hidden="true" focusable="false"><path class="character-shirt" d="M8 104V94C8 73 29 72 38 70H60C75 73 88 78 88 94V104Z"/>${hair}<path class="character-skin" d="M39 62H58V76Q49 86 39 76Z"/><circle class="character-skin" cx="25" cy="47" r="7"/><circle class="character-skin" cx="72" cy="47" r="7"/><rect class="character-skin" x="27" y="26" width="43" height="45" rx="20"/><path class="character-collar" d="M35 73 48 83 40 91 28 78ZM61 73 49 83 56 91 69 78Z"/><g class="character-eyes"><ellipse cx="38" cy="46" rx="2.3" ry="3.2"/><ellipse cx="59" cy="46" rx="2.3" ry="3.2"/></g><path class="character-smile" d="M41 58Q49 65 57 58"/>${accessory}${crown}</svg>`;
@@ -219,28 +229,33 @@ function render() {
   $('#lobby').hidden = Boolean(state); $('#game').hidden = !state;
   document.body.classList.toggle('in-game', Boolean(state));
   document.body.classList.toggle('skills-mode', state?.mode === 'skills');
+  document.body.classList.toggle('four-mode', state?.mode === 'four');
   $('#table-nav-label').textContent = state ? '当前牌桌' : '开始游戏';
   document.title = state ? `房间 ${state.code} · 三人局` : '三人局 · 联机斗地主';
   if (!state) { connectionUI(); return; }
   $('#room-title').textContent = state.code;
-  $('#round-label').textContent = `${state.mode === 'skills' ? '技能 · ' : ''}${state.round ? `第 ${String(state.round).padStart(2, '0')} 局 · ${{ waiting: '等待加入', bidding: '叫分中', playing: '对局中', finished: '本局结束' }[state.phase]}` : '等待开局'}`;
+  $('#round-label').textContent = `${modeRules(state.mode).name} · ${state.round ? `第 ${String(state.round).padStart(2, '0')} 局 · ${{ waiting: '等待加入', bidding: '叫分中', playing: '对局中', finished: '本局结束' }[state.phase]}` : '等待开局'}`;
   $('.arena').dataset.phase = state.phase;
-  $('#multiplier-label').textContent = state.landlordId ? `当前倍数 × ${state.multiplier}` : '经典三人 · 54 张牌';
+  $('#multiplier-label').textContent = state.landlordId ? `当前倍数 × ${state.multiplier}` : `${capacity()} 人 · ${state.mode === 'four' ? 108 : 54} 张牌`;
   const index = state.players.findIndex(p => p.id === state.me);
   // Turn order is self → right → left; consistent on every device.
-  const right = state.players[(index + 1) % 3];
-  const left = state.players[(index + 2) % 3];
+  const right = state.players[(index + 1) % capacity()];
+  const left = state.players[(index + capacity() - 1) % capacity()];
+  const top = capacity() === 4 ? state.players[(index + 2) % 4] : null;
   $('#left-player').innerHTML = playerHTML(left);
   $('#right-player').innerHTML = playerHTML(right);
+  $('#top-player').hidden = capacity() !== 4;
+  $('#top-player').innerHTML = capacity() === 4 ? playerHTML(top) : '';
+  $('#top-play').hidden = capacity() !== 4;
   $('#my-player').innerHTML = playerHTML(me(), true);
   $('#bottom-label').textContent = state.landlordId ? '地主底牌 · 已公开' : '地主底牌';
-  $('#bottom-cards').innerHTML = state.bottom.length ? ascending(state.bottom).map(c => cardHTML(c, { mini: true })).join('') : '<span class="playing-card mini back"></span>'.repeat(3);
-  renderCenter(); renderPlayedCards(left, right); renderActions(); renderHand(); renderScores(); tick();
+  $('#bottom-cards').innerHTML = state.bottom.length ? ascending(state.bottom).map(c => cardHTML(c, { mini: true })).join('') : '<span class="playing-card mini back"></span>'.repeat(modeRules(state.mode).bottom);
+  renderCenter(); renderPlayedCards(left, right, top); renderActions(); renderHand(); renderScores(); tick();
 }
 function renderCenter() {
   const center = $('#table-center');
   if (state.phase === 'waiting') {
-    center.innerHTML = `<h2 class="waiting-title">${state.players.length === 3 ? '等待准备' : `等待玩家（${state.players.length}/3）`}</h2><p>${state.players.some(p => p.bot) ? '真人玩家准备后自动开始' : state.players.length < 3 ? '邀请好友或由房主添加机器人' : '三人准备后自动开始'}</p>`;
+    center.innerHTML = `<h2 class="waiting-title">${state.players.length === capacity() ? '等待准备' : `等待玩家（${state.players.length}/${capacity()}）`}</h2><p>${state.players.some(p => p.bot) ? '真人玩家准备后自动开始' : state.players.length < capacity() ? '邀请好友或由房主添加机器人' : '全部准备后自动开始'}</p>`;
   } else if (state.phase === 'bidding') {
     center.innerHTML = `<h2>叫地主</h2><span class="play-caption">${state.highestBid ? `当前最高 ${state.highestBid} 分` : '暂无叫分'}</span>`;
   } else if (state.phase === 'finished') {
@@ -249,8 +264,8 @@ function renderCenter() {
     center.innerHTML = '';
   }
 }
-function renderPlayedCards(left, right) {
-  for (const [selector, player] of [['#left-play', left], ['#right-play', right], ['#my-play', me()]]) {
+function renderPlayedCards(left, right, top) {
+  for (const [selector, player] of [['#left-play', left], ['#top-play', top], ['#right-play', right], ['#my-play', me()]]) {
     const zone = $(selector);
     const play = player && state.tablePlays?.[player.id];
     const passed = state.phase === 'playing' && player && state.tablePasses?.[player.id];
@@ -284,11 +299,11 @@ function renderActions() {
   const button = (action, text, primary = false, off = false) => `<button class="${primary ? 'primary' : 'secondary'}" data-action="${action}"${disabled || off ? ' disabled' : ''}>${text}</button>`;
   if (['waiting', 'finished'].includes(state.phase)) {
     html = button('ready', me().ready ? '取消准备' : state.phase === 'finished' ? '准备下一局' : '准备开局', !me().ready);
-    if (state.me === state.hostId && state.players.length < 3) html += button('fill-bots', '机器人补位');
+    if (state.me === state.hostId && state.players.length < capacity()) html += button('fill-bots', '机器人补位');
     message = me().ready ? '已准备' : '';
     if (state.phase === 'finished') {
       const delta = state.result.deltas.find(d => d.id === state.me).delta;
-      message = `${delta > 0 ? '获胜 +' : '本局 '}${delta} 分 · 已准备 ${state.players.filter(p => p.ready).length}/3`;
+      message = `${delta > 0 ? '获胜 +' : '本局 '}${delta} 分 · 已准备 ${state.players.filter(p => p.ready).length}/${capacity()}`;
     }
   } else if (state.phase === 'bidding') {
     message = myTurn() ? '轮到你叫分' : `等待 ${state.players.find(p => p.id === state.turnId).name} 叫分`;
@@ -324,8 +339,9 @@ function renderHand() {
   endSelectionGesture(false);
   const hand = ascending(effectiveHand());
   const skillMode = state.mode === 'skills';
+  const four = state.mode === 'four';
   const mobile = window.innerWidth < 600;
-  const cardWidth = mobile ? 54 : 92;
+  const cardWidth = mobile ? (four ? 46 : 54) : 92;
   const compact = window.innerHeight < 1150;
   const shortPhone = mobile && window.innerHeight < 760;
   const shortDesktop = !mobile && window.innerHeight < 800;
@@ -333,15 +349,15 @@ function renderHand() {
   const rowGap = shortPhone ? 4 : compact ? (mobile ? 8 : 6) : (mobile ? 20 : 12);
   const topSpace = shortPhone ? 8 : compact ? 12 : 24;
   const width = container.clientWidth - 4;
-  const minStep = mobile ? (skillMode ? 17 : 22) : (skillMode ? 25 : 30);
-  const rowSize = Math.max(1, Math.min(mobile ? (skillMode ? 14 : 10) : (skillMode ? 25 : 20), Math.floor((width - cardWidth) / minStep) + 1));
-  container.style.height = `${topSpace + Math.ceil((skillMode ? 25 : 20) / rowSize) * (cardHeight + rowGap)}px`;
+  const minStep = mobile ? (skillMode ? 17 : 22) : (skillMode || four ? 25 : 30);
+  const rowSize = four && mobile ? 17 : Math.max(1, Math.min(mobile ? (skillMode ? 14 : 10) : (four ? 33 : skillMode ? 25 : 20), Math.floor((width - cardWidth) / minStep) + 1));
+  container.style.height = `${topSpace + Math.ceil(modeRules(state.mode).maxHand / rowSize) * (cardHeight + rowGap)}px`;
   if (!hand.length) { container.innerHTML = `<div class="hand-placeholder">${state.phase === 'finished' ? '手牌已出完' : '等待发牌'}</div>`; return; }
   const rows = [];
   for (let i = 0; i < hand.length; i += rowSize) rows.push(hand.slice(i, i + rowSize));
   const step = Math.min(mobile ? 28 : 40, (width - cardWidth) / Math.max(1, Math.min(rowSize, hand.length) - 1));
   container.innerHTML = rows.map(row => {
-    const fontSize = mobile ? (skillMode ? 16 : 20) : skillMode ? Math.min(30, Math.floor(step * .9)) : 30;
+    const fontSize = mobile ? (four ? Math.min(16, Math.floor(step * .9)) : skillMode ? 16 : 20) : skillMode || four ? Math.min(30, Math.floor(step * .9)) : 30;
     return `<div class="hand-row" style="--card-w:${cardWidth}px;--card-h:${cardHeight}px;--step:${step}px;--rank-size:${fontSize}px">${row.map(c => cardHTML(c, { interactive: state.phase === 'playing' })).join('')}</div>`;
   }).join('');
 }
@@ -373,7 +389,7 @@ function eventBanner(kind, title, detail, score = '', effect = null, cards = [])
 }
 function reactAtSeat(playerId, kind) {
   const zone = [...document.querySelectorAll('.player-play')].find(node => node.dataset.playerId === playerId);
-  const avatar = $(zone?.id === 'left-play' ? '#left-player .avatar' : zone?.id === 'right-play' ? '#right-player .avatar' : '#my-player .avatar');
+  const avatar = $(zone?.id === 'left-play' ? '#left-player .avatar' : zone?.id === 'top-play' ? '#top-player .avatar' : zone?.id === 'right-play' ? '#right-player .avatar' : '#my-player .avatar');
   if (!avatar) return;
   if (['bomb', 'rocket', 'win', 'landlord'].includes(kind)) {
     moveCard(avatar, [{ transform: 'translateY(0)' }, { transform: 'translateY(-7px) rotate(-4deg)', offset: .4 }, { transform: 'translateY(0)' }], { duration: 650 });
@@ -407,7 +423,7 @@ function presentTableCues(previous, next) {
     } else if (effect) {
       tableSound.play(effect.family); reactAtSeat(cue.playerId, cue.kind);
       const detail = ['bomb', 'rocket'].includes(cue.kind) ? '倍数 ×2' : `${next.tablePlays[cue.playerId].cards.length} 张`;
-      eventBanner(cue.kind, effect.title, `${player.name} · ${detail}`, '', effect, next.tablePlays[cue.playerId].cards);
+      eventBanner(cue.kind, next.tablePlays[cue.playerId].combo.name, `${player.name} · ${detail}`, '', effect, next.tablePlays[cue.playerId].cards);
       emphasisDelay = effect.duration + 50;
     } else if (cue.kind === 'warning') {
       cueLater(() => {
@@ -426,7 +442,7 @@ function presentTableCues(previous, next) {
 }
 
 function renderScores() {
-  $('#player-count').textContent = `${state.players.length} / 3`;
+  $('#player-count').textContent = `${state.players.length} / ${capacity()}`;
   $('#scores').innerHTML = state.players.map(p => `<div class="score-row">${avatarHTML(p)}<div><div class="player-name">${escape(p.name)}${p.id === state.me ? ' · 你' : ''}</div><small>${role(p)} · ${p.connected ? '在线' : '离线'}</small></div><span class="score-value">${p.score > 0 ? '+' : ''}${p.score}</span></div>`).join('');
   $('#game-log').innerHTML = state.log.map(text => `<li>${escape(text)}</li>`).join('');
   $('#game-log').scrollTop = $('#game-log').scrollHeight;
@@ -557,7 +573,7 @@ function moveCard(node, frames, options) {
 function captureCardOrigins() {
   return {
     hand: new Map([...$('#hand').querySelectorAll('[data-card-id]')].map(node => [Number(node.dataset.cardId), node.getBoundingClientRect()])),
-    left: $('#left-player').getBoundingClientRect(), right: $('#right-player').getBoundingClientRect(),
+    top: $('#top-player').getBoundingClientRect(), left: $('#left-player').getBoundingClientRect(), right: $('#right-player').getBoundingClientRect(),
     bottom: $('#bottom-cards').getBoundingClientRect(),
   };
 }
@@ -603,7 +619,7 @@ function animateTableUpdate(previous, next, origins) {
       moveCard(card, [{ transform: `translateX(${(i - 1) * 5}px) rotate(0deg)` }, { transform: `translateX(${(i - 1) * 52}px) rotate(${(i - 1) * 18}deg)` }, { transform: `translateX(${(i - 1) * 5}px) rotate(0deg)` }], { duration: 850, easing: 'ease-in-out' });
     });
     $('#hand').querySelectorAll('.playing-card').forEach((card, i) => flyToCard(card, source, 900 + i * 45));
-    for (const target of ['#left-player .avatar', '#right-player .avatar']) {
+    for (const target of ['#left-player .avatar', '#top-player .avatar', '#right-player .avatar']) {
       const destination = $(target)?.getBoundingClientRect();
       if (!destination) continue;
       for (let i = 0; i < 4; i++) {
@@ -624,7 +640,7 @@ function animateTableUpdate(previous, next, origins) {
     const play = next.tablePlays[id];
     if (previous.tablePlays?.[id]?.sequence === play.sequence) continue;
     zone.querySelectorAll('.playing-card').forEach((card, i) => {
-      const source = id === next.me ? origins.hand.get(Number(card.dataset.cardId)) : zone.id === 'left-play' ? origins.left : origins.right;
+      const source = id === next.me ? origins.hand.get(Number(card.dataset.cardId)) : zone.id === 'left-play' ? origins.left : zone.id === 'top-play' ? origins.top : origins.right;
       flyToCard(card, source, i * 12, ['bomb', 'rocket'].includes(play.combo.type) ? 650 : 420);
     });
   }
