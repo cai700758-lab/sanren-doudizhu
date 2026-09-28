@@ -1120,7 +1120,7 @@ body:not(.in-game) .site-header .connection { display: none; }
   body:not(.in-game) .entry-panel { width: auto; }
 }
 .entry-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
-.entry-actions button { min-width: 0; padding-inline: 8px; }
+.entry-actions #create-button, .entry-actions #join-button { width: 100%; min-width: 0; height: 52px; margin: 0; padding: 8px; }
 .room-choice { min-width: 0; padding: 0; margin: 0 0 18px; border: 0; }
 .room-choice legend { padding: 0; margin-bottom: 8px; color: var(--color-ink); font-size: 13px; font-weight: 750; }
 .choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
