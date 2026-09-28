@@ -1,0 +1,10 @@
+node_modules
+.git
+test
+test-results
+.hallmark
+*.log
+.env
+.env.*
+.tools
+.runtime
