@@ -5,7 +5,7 @@ import { networkInterfaces } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { Server } from 'socket.io';
-import { makeDeck, sortCards, classify, beats, MODES, modeRules } from './lib/game.js';
+import { makeDeck, sortCards, classify, beats, MODES, modeRules, isSkillMode } from './lib/game.js';
 import { chooseBotBid, chooseBotPlay } from './lib/bot.js';
 import { SKILLS, SKILL_IDS, applySkill, chooseSkillCard, resolveWildCards, wildHands, canUpgrade } from './lib/skills.js';
 
@@ -112,7 +112,7 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
     room.highestBid = 0; room.bidderId = null; room.bidCount = 0; room.multiplier = 1; room.passes = 0;
     room.bottom = deck.slice(rules.players * rules.dealt); room.turn = randomInt(rules.players);
     room.players.forEach((p, i) => { p.hand = sortCards(deck.slice(i * rules.dealt, (i + 1) * rules.dealt)); p.ready = false; p.bid = null; p.lastAction = ''; p.playCount = 0; });
-    room.players.forEach(p => { p.skill = room.mode === 'skills' ? { id: SKILL_IDS[randomInt(SKILL_IDS.length)], used: false, choices: null } : null; });
+    room.players.forEach(p => { p.skill = isSkillMode(room.mode) ? { id: SKILL_IDS[randomInt(SKILL_IDS.length)], used: false, choices: null } : null; });
     log(room, redeal ? '所有人都不叫，重新洗牌。' : `第 ${room.round} 局开始，轮流叫分。`);
     schedule(room, dealDelayMs);
   }

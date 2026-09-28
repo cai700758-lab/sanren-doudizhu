@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import { createGameServer } from '../server.js';
 import { makeDeck, sortCards } from '../lib/game.js';
 import { skillSummary } from '../public/skill-icons.js';
+import { createRoom, joinRoom } from './lobby-helper.mjs';
 
 const game = createGameServer({ dealDelayMs: 0, actionDelayMs: 0 });
 await new Promise(resolve => game.httpServer.listen(0, '127.0.0.1', resolve));
@@ -19,20 +20,18 @@ try {
     const page = await context.newPage(); pages.push(page); page.on('pageerror', error => errors.push(error.message));
     await page.goto(url);
     if (!i) {
-      assert.equal(await page.locator('[data-mode="classic"]').getAttribute('aria-pressed'), 'true');
-      await page.locator('[data-mode="skills"]').click();
-      await page.reload(); assert.equal(await page.locator('[data-mode="skills"]').getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.locator('#lobby .entry-actions button').count(), 2);
       for (const width of [320, 375, 414, 768]) {
         await page.setViewportSize({ width, height: 900 });
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-        assert.ok(await page.locator('.mode-picker').evaluate(node => node.scrollWidth <= node.clientWidth));
+        assert.ok(await page.locator('.entry-actions').evaluate(node => node.scrollWidth <= node.clientWidth));
       }
       await page.screenshot({ path: 'test-results/skills-lobby.png', fullPage: true });
       await page.setViewportSize({ width: 1366, height: 768 });
     }
     await page.locator('#nickname').fill(['阿青', '小满', '老周'][i]);
-    if (!i) await page.locator('#create-button').click();
-    else { await page.locator('#room-code').fill(await pages[0].locator('#room-title').textContent()); await page.locator('#join-button').click(); }
+    if (!i) await createRoom(page, { skills: true });
+    else await joinRoom(page, await pages[0].locator('#room-title').textContent());
     await page.locator('#game').waitFor({ state: 'visible' });
     assert.ok(await page.locator('body').evaluate(node => node.classList.contains('skills-mode')));
   }

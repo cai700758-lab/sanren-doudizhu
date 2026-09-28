@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { createGameServer } from '../server.js';
 import { makeDeck } from '../lib/game.js';
+import { createRoom, joinRoom } from './lobby-helper.mjs';
 const game = createGameServer();
 await new Promise(resolve => game.httpServer.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${game.httpServer.address().port}`;
@@ -93,11 +94,11 @@ try {
   assert.equal(pressedY, 4, 'primary button should physically depress');
   await a.mouse.move(240, 40); await a.mouse.up();
   assert.ok(await a.evaluate(() => window.vibrationRequests.length > 0));
-  await a.locator('#feedback-button').click();
+  await a.locator('#feedback-dialog').evaluate(dialog => dialog.showModal());
   await a.locator('#sound-toggle').check();
   await a.locator('#haptics-toggle').uncheck();
   await a.reload();
-  await a.locator('#feedback-button').click();
+  await a.locator('#feedback-dialog').evaluate(dialog => dialog.showModal());
   assert.equal(await a.locator('#sound-toggle').isChecked(), true);
   assert.equal(await a.locator('#haptics-toggle').isChecked(), false);
   assert.equal(await a.evaluate(() => window.vibrationRequests.length), 0, 'vibration preference survives reload');
@@ -106,17 +107,17 @@ try {
   await a.locator('#feedback-dialog [data-close]').click();
   await a.emulateMedia({ reducedMotion: 'reduce' });
   const vibrationsBefore = await a.evaluate(() => window.vibrationRequests.filter(request => request !== 0).length);
-  await a.locator('#feedback-button').click();
+  await a.locator('#feedback-dialog').evaluate(dialog => dialog.showModal());
   assert.equal(await a.evaluate(() => window.vibrationRequests.filter(request => request !== 0).length), vibrationsBefore, 'reduced motion suppresses vibration');
   await a.locator('#feedback-dialog [data-close]').click();
   await a.emulateMedia({ reducedMotion: 'no-preference' });
   const unsupported = await browser.newContext();
   await unsupported.addInitScript(() => Object.defineProperty(navigator, 'vibrate', { value: undefined, configurable: true }));
   const fallback = await unsupported.newPage();
-  await fallback.goto(url); await fallback.locator('#feedback-button').click();
+  await fallback.goto(url); await fallback.locator('#feedback-dialog').evaluate(dialog => dialog.showModal());
   assert.equal(await fallback.locator('#haptics-toggle').isDisabled(), true);
   await unsupported.close();
-  await a.locator('#nickname').fill('阿青'); await a.locator('#create-button').click();
+  await a.locator('#nickname').fill('阿青'); await createRoom(a);
   await a.locator('#game').waitFor({ state: 'visible' });
   const code = await a.locator('#room-title').textContent();
   await a.locator('#invite-button').click();
@@ -124,7 +125,7 @@ try {
   await a.locator('#invite-dialog [data-close]').click();
   for (let i = 1; i < 3; i++) {
     await pages[i].goto(`${url}/?room=${code}`); await pages[i].locator('#nickname').fill(['', '小满', '老周'][i]);
-    await pages[i].locator('#join-button').click();
+    await joinRoom(pages[i], code);
     await pages[i].locator('#game').waitFor({ state: 'visible' });
   }
   for (const page of pages) await page.locator('[data-action="ready"]').click();
@@ -286,7 +287,7 @@ try {
   const soloContext = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true });
   const solo = await soloContext.newPage();
   solo.on('pageerror', error => errors.push(error.message));
-  await solo.goto(url); await solo.locator('#nickname').fill('单人玩家'); await solo.locator('#create-button').click();
+  await solo.goto(url); await solo.locator('#nickname').fill('单人玩家'); await createRoom(solo);
   await solo.locator('[data-action="fill-bots"]').click();
   await solo.waitForFunction(() => document.querySelectorAll('[data-action="remove-bot"]').length === 2);
   await solo.screenshot({ path: 'test-results/bots-mobile.png', fullPage: true });

@@ -117,17 +117,11 @@
   body:not(.in-game) #entry-form label { margin: 0; line-height: 18px; font-size: 12px; }
   body:not(.in-game) #entry-form input { min-height: 38px; height: 38px; padding: 6px 10px; font-size: 14px; }
   body:not(.in-game) #create-button, body:not(.in-game) #join-button { min-height: 40px; height: 40px; padding: 6px 12px; font-size: 13px; }
-  body:not(.in-game) #entry-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 24px; }
-  body:not(.in-game) .mode-picker { grid-column: 1 / -1; margin-bottom: 4px; }
-  body:not(.in-game) .mode-picker button { min-height: 34px; padding-block: 3px; }
-  body:not(.in-game) label[for="nickname"] { grid-column: 1; grid-row: 2; }
-  body:not(.in-game) #nickname { grid-column: 1; grid-row: 3; }
-  body:not(.in-game) #create-button { grid-column: 1; grid-row: 4; margin: 0; }
-  body:not(.in-game) label[for="room-code"] { grid-column: 2; grid-row: 2; }
-  body:not(.in-game) .join-row { grid-column: 2; grid-row: 3 / 5; align-self: start; flex-direction: column; gap: 6px; }
-  body:not(.in-game) .join-row button { width: 100%; }
-  body:not(.in-game) .or-divider { display: none; }
-  body:not(.in-game) #entry-error { grid-column: 1 / -1; margin: 0; min-height: 0; }
+  body:not(.in-game) #entry-form { display: flex; flex-direction: column; gap: 8px; }
+  body:not(.in-game) #entry-error { margin: 0; min-height: 0; }
+  body:not(.in-game) .entry-actions { margin-top: 0; }
+  body:not(.in-game) .entry-actions button { min-height: 40px; padding: 5px 10px; font-size: 13px; }
+  body.in-game.landscape-mode.skills-mode.four-mode .hand .playing-card .center-suit { font-size: min(20px, calc(var(--card-h) * .4)); }
 }
 
 @media (orientation: landscape) and (360px <= height <= 550px) {

@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { io } from 'socket.io-client';
 import { canUpgrade } from '../lib/skills.js';
-import { modeRules } from '../lib/game.js';
+import { isSkillMode, modeRules } from '../lib/game.js';
 
 const input = process.argv[2] || process.env.GAME_URL;
 if (!input) throw new Error('Usage: npm run test:online -- https://YOUR-GAME.onrender.com');
@@ -19,7 +19,7 @@ async function until(predicate, timeout = 20000) {
 }
 const response = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(90000) });
 assert.equal(response.status, 200); assert.equal((await response.json()).ok, true);
-for (const mode of ['classic', 'skills', 'four']) {
+for (const mode of ['classic', 'skills', 'four', 'fourSkills']) {
   const rules = modeRules(mode);
   const clients = [];
   async function connect(transports, token) {
@@ -58,7 +58,7 @@ for (const mode of ['classic', 'skills', 'four']) {
     let actor = players.find(client => client.id === players[0].state.turnId);
     await turnReady(actor); await send(actor, 'bid', { value: 3 });
     await until(() => players.every(client => client.state?.phase === 'playing')); await settle(players); await turnReady(actor);
-    if (mode === 'skills') {
+    if (isSkillMode(mode)) {
       const self = actor.state.players.find(p => p.id === actor.id);
       const card = self.skill.id === 'upgrade' ? self.hand.find(canUpgrade) : self.hand[0];
       if (card) {

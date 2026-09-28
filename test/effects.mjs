@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import { createGameServer } from '../server.js';
 import { makeDeck, classify, rankLabel } from '../lib/game.js';
 import { comboEffect } from '../public/combo-effects.js';
+import { createRoom, joinRoom } from './lobby-helper.mjs';
 
 const game = createGameServer({ dealDelayMs: 0, actionDelayMs: 0 });
 await new Promise(resolve => game.httpServer.listen(0, '127.0.0.1', resolve));
@@ -19,10 +20,9 @@ try {
     const page = await context.newPage(); pages.push(page);
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(url); await page.locator('#nickname').fill(['阿青', '小满', '老周'][i]);
-    if (!i) await page.locator('#create-button').click();
+    if (!i) await createRoom(page);
     else {
-      await page.locator('#room-code').fill(await pages[0].locator('#room-title').textContent());
-      await page.locator('#join-button').click();
+      await joinRoom(page, await pages[0].locator('#room-title').textContent());
     }
     await page.locator('#game').waitFor({ state: 'visible' });
   }

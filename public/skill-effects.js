@@ -1,4 +1,5 @@
 import { SKILLS } from '/skills.js';
+import { isSkillMode } from '/game.js';
 import { skillIcon } from './skill-icons.js';
 
 export const SKILL_NOTICE_MS = 5200;
@@ -43,7 +44,7 @@ export function createSkillEffects({ reducedMotion }) {
   }
   function seat(playerId) {
     const zone = [...document.querySelectorAll('.player-play')].find(node => node.dataset.playerId === playerId);
-    const selector = zone?.id === 'my-play' ? '#hand' : zone?.id === 'left-play' ? '#left-player .opponent-hand' : '#right-player .opponent-hand';
+    const selector = zone?.id === 'my-play' ? '#hand' : zone?.id === 'left-play' ? '#left-player .opponent-hand' : zone?.id === 'top-play' ? '#top-player .opponent-hand' : '#right-player .opponent-hand';
     const node = document.querySelector(selector) || document.querySelector('#bottom-cards');
     const box = node.getBoundingClientRect();
     return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
@@ -189,7 +190,7 @@ export function createSkillEffects({ reducedMotion }) {
     queue.push({ event, players }); if (!active) next();
   }
   function update(previous, state) {
-    if (!previous || !state || state.mode !== 'skills' || previous.code !== state.code || previous.dealId !== state.dealId || state.phase === 'waiting') { reset(); return; }
+    if (!previous || !state || !isSkillMode(state.mode) || previous.code !== state.code || previous.dealId !== state.dealId || state.phase === 'waiting') { reset(); return; }
     if (document.hidden) return;
     const after = previous.skillEvent?.sequence || 0;
     const events = state.skillEvents?.length ? state.skillEvents : state.skillEvent ? [state.skillEvent] : [];

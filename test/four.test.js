@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { io } from 'socket.io-client';
 import { createGameServer } from '../server.js';
 import { makeDeck, classify, beats, findHint, findClosestSelection } from '../lib/game.js';
+import { SKILL_IDS } from '../lib/skills.js';
 const cards = (...ranks) => ranks.map((rank, id) => ({ rank, id, suit: '♠' }));
 const combo = (...ranks) => classify(cards(...ranks), 'four');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -36,6 +37,15 @@ test('four-player hints and repaired selections respect large bombs and legal wi
   assert.equal(classify(hint, 'four').size, 5);
   assert.equal(classify(findHint(hand, combo(...Array(8).fill(15)), 'four'), 'four').type, 'rocket');
   assert.equal(classify(findClosestSelection(cards(3, 3, 3, 4, 4, 4, 5, 6), null, 'four'), 'four').type, 'airplane');
+});
+test('four-player skills use the two-deck rules and still repair wild-card hands', () => {
+  assert.equal(makeDeck('fourSkills').length, 108);
+  assert.equal(classify(cards(16, 16, 17, 17), 'fourSkills').type, 'rocket');
+  assert.equal(classify(cards(3, 3, 3, 4), 'fourSkills'), null);
+  assert.equal(classify(findHint(cards(3, 3, 3, 3, 3), combo(15, 15, 15, 15), 'fourSkills'), 'fourSkills').size, 5);
+  const longAirplane = cards(...Array.from({ length: 12 }, (_, i) => Array(3).fill(i + 3)).flat());
+  assert.equal(classify(longAirplane, 'fourSkills')?.type, 'airplane');
+  assert.equal(findClosestSelection(longAirplane, null, 'fourSkills')?.length, 36);
 });
 async function setup(t, options = {}) {
   const game = createGameServer({ dealDelayMs: 0, actionDelayMs: 0, botDelayMs: 10, turnMs: 60000, ...options });
@@ -108,11 +118,11 @@ test('four humans: readiness, private deal, bidding, three passes, reconnect, sc
   assert.equal(a.state.phase, 'finished'); assert.deepEqual(a.state.players.map(p => p.hand), remaining);
   await ok(players[3], 'ready', { ready: true }); assert.equal(a.state.phase, 'bidding'); assert.equal(a.state.round, 2);
 });
-for (const humans of [1, 2, 3]) test(`four seats with ${humans} humans: bots fill and complete the round`, { timeout: 20000 }, async t => {
+for (const mode of ['four', 'fourSkills']) for (const humans of [1, 2, 3]) test(`${mode} with ${humans} humans: bots fill and complete the round`, { timeout: 20000 }, async t => {
   const { game, connect, ok } = await setup(t);
   const players = [];
   for (let i = 0; i < humans; i++) players.push(await connect());
-  const a = players[0]; await ok(a, 'create', { name: '房主', mode: 'four' });
+  const a = players[0]; await ok(a, 'create', { name: '房主', mode });
   for (const p of players.slice(1)) await ok(p, 'join', { name: '朋友', code: a.state.code });
   await ok(a, 'fill-bots'); assert.equal(a.state.players.filter(p => p.bot).length, 4 - humans);
   for (const p of players) await ok(p, 'ready', { ready: true });
@@ -122,11 +132,12 @@ for (const humans of [1, 2, 3]) test(`four seats with ${humans} humans: bots fil
     if (actor && actor.state.revision === a.state.revision && actor.state.turnId === actor.id) {
       if (actor.state.phase === 'bidding') await ok(actor, 'bid', { value: 3 });
       else {
-        const hint = findHint(actor.state.players.find(p => p.id === actor.id).hand, actor.state.lastPlay?.combo, 'four');
+        const hint = findHint(actor.state.players.find(p => p.id === actor.id).hand, actor.state.lastPlay?.combo, mode);
         await ok(actor, hint ? 'play' : 'pass', hint ? { cards: hint.map(c => c.id) } : {});
       }
     }
     await sleep(5);
   }
   assert.equal(a.state.phase, 'finished');
+  if (mode === 'fourSkills') assert.ok(a.state.players.every(p => p.skill && SKILL_IDS.includes(p.skill.id)));
 });

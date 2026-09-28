@@ -2,6 +2,7 @@ import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { createGameServer } from '../server.js';
+import { createRoom, joinRoom } from './lobby-helper.mjs';
 import { makeDeck, classify } from '../lib/game.js';
 
 const game = createGameServer({ dealDelayMs: 0, actionDelayMs: 0 });
@@ -16,8 +17,8 @@ try {
     await context.addInitScript(() => localStorage.setItem('sanren-sound', 'off'));
     const page = await context.newPage(); pages.push(page); page.on('pageerror', error => errors.push(error.message));
     await page.goto(url); await page.locator('#nickname').fill(`玩家${i + 1}`);
-    if (!i) await page.locator('#create-button').click();
-    else { await page.locator('#room-code').fill(await pages[0].locator('#room-title').textContent()); await page.locator('#join-button').click(); }
+    if (!i) await createRoom(page);
+    else await joinRoom(page, await pages[0].locator('#room-title').textContent());
     await page.locator('#game').waitFor({ state: 'visible' });
   }
   for (const page of pages) await page.locator('[data-action="ready"]').click();

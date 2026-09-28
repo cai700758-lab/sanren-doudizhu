@@ -2,6 +2,7 @@ import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { createGameServer } from '../server.js';
+import { createRoom, joinRoom } from './lobby-helper.mjs';
 import { makeDeck, sortCards } from '../lib/game.js';
 import { SKILLS } from '../lib/skills.js';
 
@@ -16,8 +17,8 @@ try {
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } }); pages.push(page);
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(url); await page.locator('#nickname').fill(['阿青', '小满', '老周'][i]);
-    if (!i) { await page.locator('[data-mode="skills"]').click(); await page.locator('#create-button').click(); }
-    else { await page.locator('#room-code').fill(await pages[0].locator('#room-title').textContent()); await page.locator('#join-button').click(); }
+    if (!i) await createRoom(page, { skills: true });
+    else await joinRoom(page, await pages[0].locator('#room-title').textContent());
     await page.locator('#game').waitFor({ state: 'visible' });
   }
   for (const page of pages) await page.locator('[data-action="ready"]').click();

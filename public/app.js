@@ -1,4 +1,4 @@
-import { classify as classifyCards, beats, findHint as hintCards, findClosestSelection as closestCards, rankLabel, MODES, modeRules } from '/game.js';
+import { classify as classifyCards, beats, findHint as hintCards, findClosestSelection as closestCards, rankLabel, MODES, modeRules, isFourMode, isSkillMode } from '/game.js';
 import { tableCues } from './table-cues.js';
 import { createTableSound } from './sound.js';
 import { comboEffect, comboArtwork } from './combo-effects.js';
@@ -63,6 +63,8 @@ $('#table-button').addEventListener('click', () => {
 let state = null, selected = new Set(), busy = false, connected = false, clockOffset = 0, toastTimer;
 let selectionAssistTimer, selectionAdjustment = null;
 let roomMode = Object.hasOwn(MODES, storage.get('sanren-mode', true)) ? storage.get('sanren-mode', true) : 'classic';
+$('#create-options [name="room-size"][value="' + modeRules(roomMode).players + '"]').checked = true;
+$('#create-options [name="room-kind"][value="' + (isSkillMode(roomMode) ? 'skills' : 'classic') + '"]').checked = true;
 const classify = cards => classifyCards(cards, state?.mode);
 const findHint = (cards, target) => hintCards(cards, target, state?.mode);
 const findClosestSelection = (cards, target) => closestCards(cards, target, state?.mode);
@@ -73,17 +75,8 @@ const skillUI = createSkillUI({ getState: () => state, send, cardHTML, getSelect
   onWildChange(id, rank) { wildRanks[id] = rank; cancelSelectionAssist(); renderHand(); renderActions(); },
   getError: () => $('#toast').textContent,
   isBlocked: () => !connected || busy || inTransition() });
-for (const button of document.querySelectorAll('[data-mode]')) {
-  button.setAttribute('aria-pressed', String(button.dataset.mode === roomMode));
-  button.addEventListener('click', () => {
-    roomMode = button.dataset.mode; storage.set('sanren-mode', roomMode, true);
-    for (const item of document.querySelectorAll('[data-mode]')) item.setAttribute('aria-pressed', String(item === button));
-    $('.mode-badge').textContent = `${modeRules(roomMode).players} 人`;
-  });
-}
-$('.mode-badge').textContent = `${modeRules(roomMode).players} 人`;
 $('#rules-dialog .rules-content').insertAdjacentHTML('afterbegin', '<h3>三人经典</h3>');
-$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', '<h3>四人经典</h3><p>两副牌共 108 张，每人 25 张，地主拿 8 张底牌后共 33 张。一位地主对抗三位农民，任一农民出完即为农民阵营获胜。全部准备才开局；四人都不叫则重新发牌，连续三家不出后由上一位出牌者领出。</p><p>可出单张、对子、三张、三带二、顺子、连对、飞机及飞机带对子。不能三带一、飞机带单或四带二；飞机翅膀为不同点数的对子，不能复用主体点数。两个小王或两个大王可作对子，一小王加一大王不能出。四至八张同点数为炸弹，先比张数再比点数；两小王加两大王是最大的四王炸。2 和王不能进入顺子、连对或飞机主体。</p><p>本游戏四人计分：叫分为初始倍数，每个炸弹、四王炸、春天各翻倍；地主得失三份积分，每位农民一份。八张炸弹和四王炸不会直接判胜，没有农民出炸数量限制。四人经典不分配技能。</p>');
+$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', '<h3>四人经典与四人技能</h3><p>两副牌共 108 张，每人 25 张，地主拿 8 张底牌后共 33 张。一位地主对抗三位农民，任一农民出完即为农民阵营获胜。全部准备才开局；四人都不叫则重新发牌，连续三家不出后由上一位出牌者领出。</p><p>可出单张、对子、三张、三带二、顺子、连对、飞机及飞机带对子。不能三带一、飞机带单或四带二；飞机翅膀为不同点数的对子，不能复用主体点数。两个小王或两个大王可作对子，一小王加一大王不能出。四至八张同点数为炸弹，先比张数再比点数；两小王加两大王是最大的四王炸。2 和王不能进入顺子、连对或飞机主体。</p><p>本游戏四人计分：叫分为初始倍数，每个炸弹、四王炸、春天各翻倍；地主得失三份积分，每位农民一份。八张炸弹和四王炸不会直接判胜，没有农民出炸数量限制。四人技能在上述四人规则下，每人额外获得一个技能。</p>');
 $('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', `<h3>技能模式</h3><p>建房时选择技能模式。每人发牌时随机获得一个技能，可能与其他玩家相同。只能在自己的出牌回合使用，每局一次；使用后继续出牌，回合计时不重置。</p><ul>${Object.values(SKILLS).map(skill => `<li><strong>${skill.name}</strong>：${skill.description}</li>`).join('')}</ul><p>随机牌来自完整的 54 张牌，包含大小王，可以与已有牌重复。万能牌可替代大小王，仍需组成合法牌型；五张同点数不算炸弹。赠牌或弃牌清空自己的手牌时直接获胜。三选一的候选牌仅本人可见，超时会选第一张并继续托管。</p>`);
 const initialCode = new URLSearchParams(location.search).get('room');
 if (/^\d{6}$/.test(initialCode || '')) $('#room-code').value = initialCode;
@@ -104,6 +97,8 @@ function connectionUI() {
   $('#connection').classList.toggle('online', connected);
   $('#create-button').disabled = !connected || busy;
   $('#join-button').disabled = !connected || busy;
+  $('#create-confirm').disabled = !connected || busy;
+  $('#join-confirm').disabled = !connected || busy;
   if (state) renderActions();
 }
 socket.on('connect', () => { connected = true; connectionUI(); });
@@ -119,6 +114,7 @@ socket.on('state', next => {
   cancelCardMotion();
   endSelectionGesture(false);
   state = next;
+  if (state) { $('#create-dialog').close(); $('#join-dialog').close(); }
   if (state) {
     clockOffset = state.serverNow - Date.now();
     const handIds = new Set(me().hand.map(c => c.id));
@@ -141,12 +137,12 @@ async function send(event, data = {}) {
   if (!connected) { toast('正在重新连接，请稍候。'); return false; }
   if (busy) return false;
   busy = true; connectionUI();
-  for (const b of document.querySelectorAll('#actions button, #entry-form button')) b.setAttribute('aria-busy', 'true');
+  for (const b of document.querySelectorAll('#actions button, #entry-form button, #create-confirm, #join-confirm')) b.setAttribute('aria-busy', 'true');
   try {
     const response = await socket.timeout(6000).emitWithAck(event, { ...data, revision: state?.revision });
     if (!response.ok) {
       feedback('error');
-      if (!state) { $('#entry-error').textContent = response.error; $('#nickname').setAttribute('aria-invalid', String(!$('#nickname').value.trim())); }
+      if (!state) { $( $('#create-dialog').open ? '#create-error' : $('#join-dialog').open ? '#join-error' : '#entry-error').textContent = response.error; }
       else toast(response.error);
       return false;
     }
@@ -160,18 +156,26 @@ async function send(event, data = {}) {
     for (const b of document.querySelectorAll('[aria-busy]')) b.removeAttribute('aria-busy');
   }
 }
-function enter(join) {
+function entryName() {
   $('#entry-error').textContent = '';
   const name = $('#nickname').value.trim();
-  if (!name) { $('#nickname').setAttribute('aria-invalid', 'true'); $('#nickname').focus(); $('#entry-error').textContent = '请输入昵称。'; feedback('error'); return; }
+  if (!name) { $('#nickname').setAttribute('aria-invalid', 'true'); $('#nickname').focus(); $('#entry-error').textContent = '请输入昵称。'; feedback('error'); return null; }
   $('#nickname').removeAttribute('aria-invalid');
   storage.set('sanren-name', name, true);
-  if (join) send('join', { name, code: $('#room-code').value.trim() });
-  else send('create', { name, mode: roomMode });
+  return name;
 }
-$('#entry-form').addEventListener('submit', event => { event.preventDefault(); enter(Boolean($('#room-code').value.trim())); });
-$('#create-button').addEventListener('click', event => { event.preventDefault(); enter(false); });
-$('#join-button').addEventListener('click', () => enter(true));
+$('#entry-form').addEventListener('submit', event => { event.preventDefault(); if (entryName()) $('#create-dialog').showModal(); });
+$('#join-button').addEventListener('click', () => { if (entryName()) { $('#join-error').textContent = ''; $('#join-dialog').showModal(); $('#room-code').focus(); } });
+$('#create-options').addEventListener('submit', event => {
+  event.preventDefault();
+  const players = Number($('#create-options [name="room-size"]:checked').value);
+  const skills = $('#create-options [name="room-kind"]:checked').value === 'skills';
+  roomMode = players === 4 ? (skills ? 'fourSkills' : 'four') : (skills ? 'skills' : 'classic');
+  storage.set('sanren-mode', roomMode, true);
+  $('#create-error').textContent = '';
+  const name = entryName(); if (name) send('create', { name, mode: roomMode });
+});
+$('#join-options').addEventListener('submit', event => { event.preventDefault(); const name = entryName(); if (name) send('join', { name, code: $('#room-code').value.trim() }); });
 $('#room-code').addEventListener('input', event => { event.target.value = event.target.value.replace(/\D/g, '').slice(0, 6); });
 
 function cardHTML(card, { mini = false, interactive = false } = {}) {
@@ -230,15 +234,15 @@ function render() {
   $('#lobby').hidden = Boolean(state); $('#game').hidden = !state;
   document.body.classList.toggle('in-game', Boolean(state));
   document.body.classList.toggle('landscape-mode', landscapeTable.matches);
-  document.body.classList.toggle('skills-mode', state?.mode === 'skills');
-  document.body.classList.toggle('four-mode', state?.mode === 'four');
+  document.body.classList.toggle('skills-mode', isSkillMode(state?.mode));
+  document.body.classList.toggle('four-mode', isFourMode(state?.mode));
   $('#table-nav-label').textContent = state ? '当前牌桌' : '开始游戏';
-  document.title = state ? `房间 ${state.code} · 三人局` : '三人局 · 联机斗地主';
+  document.title = state ? `房间 ${state.code} · ${modeRules(state.mode).name}` : '三人局 · 联机斗地主';
   if (!state) { connectionUI(); return; }
   $('#room-title').textContent = state.code;
   $('#round-label').textContent = `${modeRules(state.mode).name} · ${state.round ? `第 ${String(state.round).padStart(2, '0')} 局 · ${{ waiting: '等待加入', bidding: '叫分中', playing: '对局中', finished: '本局结束' }[state.phase]}` : '等待开局'}`;
   $('.arena').dataset.phase = state.phase;
-  $('#multiplier-label').textContent = state.landlordId ? `当前倍数 × ${state.multiplier}` : `${capacity()} 人 · ${state.mode === 'four' ? 108 : 54} 张牌`;
+  $('#multiplier-label').textContent = state.landlordId ? `当前倍数 × ${state.multiplier}` : `${capacity()} 人 · ${isFourMode(state.mode) ? 108 : 54} 张牌`;
   const index = state.players.findIndex(p => p.id === state.me);
   // Turn order is self → right → left; consistent on every device.
   const right = state.players[(index + 1) % capacity()];
@@ -340,28 +344,31 @@ function renderHand() {
   const container = $('#hand');
   endSelectionGesture(false);
   const hand = ascending(effectiveHand());
-  const skillMode = state.mode === 'skills';
-  const four = state.mode === 'four';
+  const skillMode = isSkillMode(state.mode);
+  const four = isFourMode(state.mode);
   const landscape = landscapeTable.matches;
   const mobile = window.innerWidth < 600;
   const cardWidth = landscape ? 60 : mobile ? (four ? 46 : 54) : 92;
   const compact = window.innerHeight < 1150;
   const shortPhone = mobile && window.innerHeight < 760;
   const shortDesktop = !mobile && window.innerHeight < 800;
-  const cardHeight = landscape ? Math.max(48, Math.min(88, window.innerHeight - 260)) : shortPhone ? 54 : shortDesktop ? 84 : compact ? (mobile ? 68 : 94) : (mobile ? 94 : 132);
-  const rowGap = landscape ? 0 : shortPhone ? 4 : compact ? (mobile ? 8 : 6) : (mobile ? 20 : 12);
-  const topSpace = landscape ? 10 : shortPhone ? 8 : compact ? 12 : 24;
+  const fourSkill = four && skillMode;
+  const rowGap = landscape ? (fourSkill ? 2 : 0) : shortPhone ? (fourSkill ? 2 : 4) : compact ? (mobile ? 8 : 6) : (mobile ? 20 : 12);
+  const topSpace = landscape ? (fourSkill ? 6 : 10) : shortPhone ? (fourSkill ? 4 : 8) : compact ? 12 : 24;
+  const gridRows = landscape && fourSkill ? getComputedStyle($('.arena')).gridTemplateRows.split(' ') : [];
+  const fourSkillHeight = gridRows.length === 6 ? Math.floor((parseFloat(gridRows[4]) - topSpace) / 2) - rowGap : 42;
+  const cardHeight = landscape ? fourSkill ? Math.max(24, fourSkillHeight) : Math.max(48, Math.min(88, window.innerHeight - 260)) : shortPhone ? (fourSkill ? 42 : 54) : shortDesktop ? 84 : compact ? (mobile ? 68 : 94) : (mobile ? 94 : 132);
   const handStyle = getComputedStyle(container);
   const width = container.clientWidth - parseFloat(handStyle.paddingLeft) - parseFloat(handStyle.paddingRight) - 4;
   const minStep = mobile ? (skillMode ? 17 : 22) : (skillMode || four ? 25 : 30);
-  const rowSize = landscape ? modeRules(state.mode).maxHand : four && mobile ? 17 : Math.max(1, Math.min(mobile ? (skillMode ? 14 : 10) : (four ? 33 : skillMode ? 25 : 20), Math.floor((width - cardWidth) / minStep) + 1));
+  const rowSize = landscape ? (four && skillMode ? 20 : modeRules(state.mode).maxHand) : four && mobile ? (skillMode ? 20 : 17) : Math.max(1, Math.min(mobile ? (skillMode ? 14 : 10) : (four ? 33 : skillMode ? 25 : 20), Math.floor((width - cardWidth) / minStep) + 1));
   container.style.height = `${topSpace + Math.ceil(modeRules(state.mode).maxHand / rowSize) * (cardHeight + rowGap)}px`;
   if (!hand.length) { container.innerHTML = `<div class="hand-placeholder">${state.phase === 'finished' ? '手牌已出完' : '等待发牌'}</div>`; return; }
   const rows = [];
   for (let i = 0; i < hand.length; i += rowSize) rows.push(hand.slice(i, i + rowSize));
   const step = Math.min(mobile ? 28 : 40, (width - cardWidth) / Math.max(1, Math.min(rowSize, hand.length) - 1));
   container.innerHTML = rows.map(row => {
-    const fontSize = landscape ? Math.min(24, Math.floor(step * .88)) : mobile ? (four ? Math.min(16, Math.floor(step * .9)) : skillMode ? 16 : 20) : skillMode || four ? Math.min(30, Math.floor(step * .9)) : 30;
+    const fontSize = landscape ? Math.min(24, Math.floor(step * .88), Math.floor(cardHeight * .39)) : mobile ? (four ? Math.min(16, Math.floor(step * .9)) : skillMode ? 16 : 20) : skillMode || four ? Math.min(30, Math.floor(step * .9)) : 30;
     return `<div class="hand-row" style="--card-w:${cardWidth}px;--card-h:${cardHeight}px;--step:${step}px;--rank-size:${fontSize}px">${row.map(c => cardHTML(c, { interactive: state.phase === 'playing' })).join('')}</div>`;
   }).join('');
 }
@@ -679,7 +686,7 @@ document.addEventListener('click', async event => {
   if (action === 'pass') { if (await send('pass')) { selected.clear(); renderHand(); renderActions(); } }
   if (action === 'clear') { selected.clear(); renderHand(); renderActions(); }
   if (action === 'hint') {
-    const hint = state.mode === 'skills' ? findSkillHint(me().hand, state.lastPlay?.combo) : findHint(me().hand, state.lastPlay?.combo);
+    const hint = isSkillMode(state.mode) ? findSkillHint(me().hand, state.lastPlay?.combo, state.mode) : findHint(me().hand, state.lastPlay?.combo);
     for (const card of hint || []) if (card.wild) wildRanks[card.id] = card.rank;
     selected = new Set(hint?.map(c => c.id)); renderHand(); renderActions();
     if (!hint) toast('没有能压过的牌，可以选择「不出」。');

@@ -1110,3 +1110,32 @@ body.in-game { background: var(--color-table-room); color: var(--color-table-tex
   .four-mode .arena .opponents { height: 140px; margin-top: 2px; }
   .in-game.four-mode .arena .player-slot .avatar { width: 30px; height: 32px; }
 }
+
+/* The lobby asks for a nickname first; room options appear only after Create. */
+body:not(.in-game) .site-header nav { display: none; }
+body:not(.in-game) .site-header .connection { display: none; }
+@media (width >= 1024px) {
+  body:not(.in-game) .site-header { position: static; width: auto; height: auto; min-height: 76px; flex-direction: row; align-items: center; padding: 12px 20px; border-right: 0; border-bottom: 2px solid var(--color-line); }
+  body:not(.in-game) .lobby { display: block; width: auto; max-width: 488px; min-height: 0; margin: 48px auto; padding: 0 24px; }
+  body:not(.in-game) .entry-panel { width: auto; }
+}
+.entry-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.entry-actions button { min-width: 0; padding-inline: 8px; }
+.room-choice { min-width: 0; padding: 0; margin: 0 0 18px; border: 0; }
+.room-choice legend { padding: 0; margin-bottom: 8px; color: var(--color-ink); font-size: 13px; font-weight: 750; }
+.choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.choice-grid label { position: relative; min-width: 0; cursor: pointer; }
+.choice-grid input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.choice-grid span { display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 6px 8px; border: 2px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-paper-3); color: var(--color-ink); box-shadow: 0 3px 0 var(--color-line); font-size: 14px; font-weight: 750; white-space: nowrap; transition: transform var(--dur-fast) var(--ease-out); }
+.choice-grid input:checked + span { border-color: var(--color-accent-edge); background: var(--color-mint); color: var(--color-accent-text); box-shadow: 0 3px 0 var(--color-accent-edge); }
+.choice-grid input:focus-visible + span { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+.choice-grid input:active + span { transform: translateY(2px); box-shadow: none; }
+.choice-grid input:disabled + span { opacity: .45; cursor: not-allowed; }
+.choice-grid label:hover span { border-color: var(--color-accent-edge); }
+#join-options > label { display: block; margin: 0 0 8px; font-size: 13px; font-weight: 750; }
+#create-options .form-error, #join-options .form-error { min-height: 18px; padding: 0; margin: 0 0 8px; }
+@media (width < 600px) and (height < 760px) {
+  .in-game.skills-mode.four-mode .hand, .in-game.skills-mode.four-mode .hand:has(.hand-row) { padding-top: 4px; }
+  .in-game.skills-mode.four-mode .hand-row { padding-bottom: 2px; }
+  .in-game.skills-mode.four-mode .hand .playing-card .center-suit { font-size: 18px; }
+}

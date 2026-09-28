@@ -1,5 +1,5 @@
 import { SKILLS, canUpgrade } from '/skills.js';
-import { rankLabel } from '/game.js';
+import { rankLabel, isSkillMode } from '/game.js';
 import { skillIcon, skillSummary } from './skill-icons.js';
 const escape = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const label = card => card.wild ? '万能牌' : `${card.suit}${rankLabel(card.rank)}`;
@@ -9,8 +9,8 @@ export function createSkillUI({ getState, send, cardHTML, getSelected, getWildRa
   let error = '', submitting = false;
   function render() {
     const state = getState(), me = state?.players.find(player => player.id === state.me), skill = me?.skill;
-    document.querySelector('#skill-dock').hidden = state?.mode !== 'skills';
-    button.hidden = state?.mode !== 'skills';
+    document.querySelector('#skill-dock').hidden = !isSkillMode(state?.mode);
+    button.hidden = !isSkillMode(state?.mode);
     button.disabled = !skill;
     button.setAttribute('aria-busy', String(submitting));
     button.classList.toggle('skill-error', Boolean(error));
@@ -21,7 +21,7 @@ export function createSkillUI({ getState, send, cardHTML, getSelected, getWildRa
     button.classList.toggle('skill-spent', Boolean(skill?.used && !skill.pending));
     button.setAttribute('aria-label', skill ? `${SKILLS[skill.id].name} · ${skill.used ? '已使用' : '本局可用一次'}` : '开局获得技能');
     if (!dialog.open) return;
-    if (!skill || state.mode !== 'skills') { dialog.close(); return; }
+    if (!skill || !isSkillMode(state.mode)) { dialog.close(); return; }
     const info = SKILLS[skill.id];
     document.querySelector('#skill-title').innerHTML = `${skillIcon(skill.id)}<span>${info.name}</span>`;
     const previousCard = content.querySelector('#skill-card')?.value;

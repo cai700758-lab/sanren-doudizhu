@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { createGameServer } from '../server.js';
 import { makeDeck, classify } from '../lib/game.js';
+import { createRoom, joinRoom } from './lobby-helper.mjs';
 const game = createGameServer({ dealDelayMs: 0, actionDelayMs: 0, turnMs: 600000 });
 await new Promise(resolve => game.httpServer.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${game.httpServer.address().port}`;
@@ -18,16 +19,14 @@ try {
   const a = pages[0]; await a.goto(url);
   for (const width of [320, 375, 768, 1366]) {
     await a.setViewportSize({ width, height: 768 });
-    assert.deepEqual(await a.locator('.mode-picker button').evaluateAll(buttons => buttons.filter(b => b.scrollWidth > b.clientWidth + 2).map(b => b.textContent)), []);
+    assert.equal(await a.locator('.entry-actions button').count(), 2);
   }
-  await a.locator('[data-mode="four"]').click(); assert.equal(await a.locator('.mode-badge').textContent(), '4 人');
-  await a.reload(); assert.equal(await a.locator('[data-mode="four"]').getAttribute('aria-pressed'), 'true');
-  await a.locator('#nickname').fill('阿青'); await a.locator('#create-button').click();
+  await a.locator('#nickname').fill('阿青'); await createRoom(a, { players: 4 });
   await a.locator('#game').waitFor({ state: 'visible' });
   const code = await a.locator('#room-title').textContent();
   for (let i = 1; i < 4; i++) {
     await pages[i].goto(`${url}/?room=${code}`); await pages[i].locator('#nickname').fill(['', '小满', '老周', '芽芽'][i]);
-    await pages[i].locator('#join-button').click(); await pages[i].locator('#game').waitFor({ state: 'visible' });
+    await joinRoom(pages[i], code);
   }
   assert.equal(await a.locator('#top-player .player-name').textContent(), '老周');
   for (const page of pages) await page.locator('[data-action="ready"]').click();
@@ -62,8 +61,8 @@ try {
   await bidder.locator('#hand .playing-card').first().click({ position: { x: 6, y: 15 } }); assert.equal(await bidder.locator('#hand .selected').count(), 1);
   const botContext = await browser.newContext({ viewport: { width: 320, height: 667 }, reducedMotion: 'reduce' });
   const solo = await botContext.newPage(); solo.on('pageerror', e => errors.push(e.message));
-  await solo.goto(url); await solo.locator('[data-mode="four"]').click();
-  await solo.locator('#nickname').fill('单人试玩'); await solo.locator('#create-button').click();
+  await solo.goto(url);
+  await solo.locator('#nickname').fill('单人试玩'); await createRoom(solo, { players: 4 });
   await solo.locator('[data-action="fill-bots"]').click(); await solo.locator('#top-player .role-bot').waitFor();
   assert.equal(await solo.locator('.player-slot .role-bot').count(), 3);
   await solo.locator('[data-action="ready"]').click(); await solo.locator('#hand .playing-card').first().waitFor();
