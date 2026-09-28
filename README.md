@@ -8,6 +8,8 @@
 
 大厅可选择**三人经典**、**三人技能**或**四人经典**，房间模式在创建时确定，加入者自动使用房间模式。
 
+手机支持横屏牌桌：手牌单排堆叠，对手及出牌固定在上方，操作按钮居中，技能位于左下角。旋转屏幕后保留选牌，横竖屏自动切换；横屏大厅并排展示建房与加入入口。布局预留刘海及底部安全区域，长出牌组仍可横向滑动查看。
+
 在线游玩：[sanren-doudizhu.onrender.com](https://sanren-doudizhu.onrender.com)。免费服务首次打开可能需要等待唤醒。
 
 ## 四人经典
@@ -196,6 +198,7 @@ docker run -d --name sanren-doudizhu --restart unless-stopped -p 3000:3000 sanre
 npm.cmd test
 npm.cmd run test:ui
 npm.cmd run test:four
+npm.cmd run test:landscape
 ```
 
 规则和服务器测试用 Node.js Test Runner；浏览器测试使用 Playwright，默认调用已安装的 Microsoft Edge。没有 Edge 时安装 Chromium，并设置 `BROWSER_CHANNEL=chromium`，或使用已安装的 Chrome 并设置 `BROWSER_CHANNEL=chrome`。

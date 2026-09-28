@@ -13,6 +13,7 @@ const storage = {
   set(key, value, persistent = false) { try { (persistent ? localStorage : sessionStorage).setItem(key, value); } catch { /* Private browser storage can be unavailable. */ } },
 };
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const landscapeTable = matchMedia('(orientation: landscape) and (max-height: 550px)');
 let hapticsEnabled = storage.get('sanren-haptics', true) !== 'off';
 let soundEnabled = storage.get('sanren-sound', true) !== 'off';
 const tableSound = createTableSound(() => soundEnabled);
@@ -228,6 +229,7 @@ function playerHTML(p, mine = false) {
 function render() {
   $('#lobby').hidden = Boolean(state); $('#game').hidden = !state;
   document.body.classList.toggle('in-game', Boolean(state));
+  document.body.classList.toggle('landscape-mode', landscapeTable.matches);
   document.body.classList.toggle('skills-mode', state?.mode === 'skills');
   document.body.classList.toggle('four-mode', state?.mode === 'four');
   $('#table-nav-label').textContent = state ? '当前牌桌' : '开始游戏';
@@ -282,8 +284,8 @@ function renderPlayedCards(left, right, top) {
     if (!revealed && (!play || state.phase !== 'playing')) { zone.innerHTML = ''; continue; }
     const cards = ascending(revealed ? player.hand || [] : play.cards);
     const mobile = window.innerWidth < 600;
-    const cardWidth = mobile ? 44 : 58;
-    const step = mobile ? 18 : 24;
+    const cardWidth = landscapeTable.matches ? 40 : mobile ? 44 : 58;
+    const step = landscapeTable.matches ? 16 : mobile ? 18 : 24;
     const scrolls = cardWidth + Math.max(0, cards.length - 1) * step > zone.clientWidth - 8;
     const caption = revealed ? (cards.length ? `剩余 ${cards.length} 张` : '手牌已出完') : `${play.combo.name} · ${cards.length} 张`;
     zone.innerHTML = `<span class="play-caption">${caption}${scrolls ? ' · 可滑动' : ''}</span><div class="table-cards"${scrolls ? ' tabindex="0" aria-label="左右滑动查看全部牌"' : ''}><div class="played-row" style="--played-w:${cardWidth}px;--played-step:${step}px">${cards.map(c => cardHTML(c)).join('')}</div></div>`;
@@ -340,24 +342,26 @@ function renderHand() {
   const hand = ascending(effectiveHand());
   const skillMode = state.mode === 'skills';
   const four = state.mode === 'four';
+  const landscape = landscapeTable.matches;
   const mobile = window.innerWidth < 600;
-  const cardWidth = mobile ? (four ? 46 : 54) : 92;
+  const cardWidth = landscape ? 60 : mobile ? (four ? 46 : 54) : 92;
   const compact = window.innerHeight < 1150;
   const shortPhone = mobile && window.innerHeight < 760;
   const shortDesktop = !mobile && window.innerHeight < 800;
-  const cardHeight = shortPhone ? 54 : shortDesktop ? 84 : compact ? (mobile ? 68 : 94) : (mobile ? 94 : 132);
-  const rowGap = shortPhone ? 4 : compact ? (mobile ? 8 : 6) : (mobile ? 20 : 12);
-  const topSpace = shortPhone ? 8 : compact ? 12 : 24;
-  const width = container.clientWidth - 4;
+  const cardHeight = landscape ? Math.max(48, Math.min(88, window.innerHeight - 260)) : shortPhone ? 54 : shortDesktop ? 84 : compact ? (mobile ? 68 : 94) : (mobile ? 94 : 132);
+  const rowGap = landscape ? 0 : shortPhone ? 4 : compact ? (mobile ? 8 : 6) : (mobile ? 20 : 12);
+  const topSpace = landscape ? 10 : shortPhone ? 8 : compact ? 12 : 24;
+  const handStyle = getComputedStyle(container);
+  const width = container.clientWidth - parseFloat(handStyle.paddingLeft) - parseFloat(handStyle.paddingRight) - 4;
   const minStep = mobile ? (skillMode ? 17 : 22) : (skillMode || four ? 25 : 30);
-  const rowSize = four && mobile ? 17 : Math.max(1, Math.min(mobile ? (skillMode ? 14 : 10) : (four ? 33 : skillMode ? 25 : 20), Math.floor((width - cardWidth) / minStep) + 1));
+  const rowSize = landscape ? modeRules(state.mode).maxHand : four && mobile ? 17 : Math.max(1, Math.min(mobile ? (skillMode ? 14 : 10) : (four ? 33 : skillMode ? 25 : 20), Math.floor((width - cardWidth) / minStep) + 1));
   container.style.height = `${topSpace + Math.ceil(modeRules(state.mode).maxHand / rowSize) * (cardHeight + rowGap)}px`;
   if (!hand.length) { container.innerHTML = `<div class="hand-placeholder">${state.phase === 'finished' ? '手牌已出完' : '等待发牌'}</div>`; return; }
   const rows = [];
   for (let i = 0; i < hand.length; i += rowSize) rows.push(hand.slice(i, i + rowSize));
   const step = Math.min(mobile ? 28 : 40, (width - cardWidth) / Math.max(1, Math.min(rowSize, hand.length) - 1));
   container.innerHTML = rows.map(row => {
-    const fontSize = mobile ? (four ? Math.min(16, Math.floor(step * .9)) : skillMode ? 16 : 20) : skillMode || four ? Math.min(30, Math.floor(step * .9)) : 30;
+    const fontSize = landscape ? Math.min(24, Math.floor(step * .88)) : mobile ? (four ? Math.min(16, Math.floor(step * .9)) : skillMode ? 16 : 20) : skillMode || four ? Math.min(30, Math.floor(step * .9)) : 30;
     return `<div class="hand-row" style="--card-w:${cardWidth}px;--card-h:${cardHeight}px;--step:${step}px;--rank-size:${fontSize}px">${row.map(c => cardHTML(c, { interactive: state.phase === 'playing' })).join('')}</div>`;
   }).join('');
 }
@@ -722,5 +726,7 @@ $('#chat-options').addEventListener('click', async event => {
   if (b && await send('chat', { index: Number(b.dataset.chat) })) $('#chat-dialog').close();
 });
 let resizeTimer;
-window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (state) { cancelCardMotion(); render(); } }, 100); });
+const resizeTable = () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (state) { cancelCardMotion(); render(); } }, 100); };
+window.addEventListener('resize', resizeTable);
+window.visualViewport?.addEventListener('resize', resizeTable);
 connectionUI();
