@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { io } from 'socket.io-client';
 import { canUpgrade } from '../lib/skills.js';
-import { isSkillMode, modeRules } from '../lib/game.js';
+import { isSkillMode, isRaceMode, modeRules } from '../lib/game.js';
 
 const input = process.argv[2] || process.env.GAME_URL;
 if (!input) throw new Error('Usage: npm run test:online -- https://YOUR-GAME.onrender.com');
@@ -19,7 +19,7 @@ async function until(predicate, timeout = 20000) {
 }
 const response = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(90000) });
 assert.equal(response.status, 200); assert.equal((await response.json()).ok, true);
-for (const mode of ['classic', 'skills', 'four', 'fourSkills']) {
+for (const mode of ['classic', 'skills', 'four', 'fourSkills', 'race']) {
   const rules = modeRules(mode);
   const clients = [];
   async function connect(transports, token) {
@@ -50,14 +50,17 @@ for (const mode of ['classic', 'skills', 'four', 'fourSkills']) {
     for (let i = 1; i < rules.players; i++) await send(players[i], 'join', { name: `联机检测${i}`, code });
     await until(() => players.every(client => client.state?.players.length === rules.players));
     for (const player of players) await send(player, 'ready', { ready: true });
-    await until(() => players.every(client => client.state?.phase === 'bidding')); await settle(players);
+    await until(() => players.every(client => client.state?.phase === (isRaceMode(mode) ? 'playing' : 'bidding'))); await settle(players);
     for (const client of players) {
       assert.equal(client.state.players.find(p => p.id === client.id).hand.length, rules.dealt);
       assert.ok(client.state.players.filter(p => p.id !== client.id).every(p => p.hand === undefined));
     }
     let actor = players.find(client => client.id === players[0].state.turnId);
-    await turnReady(actor); await send(actor, 'bid', { value: 3 });
-    await until(() => players.every(client => client.state?.phase === 'playing')); await settle(players); await turnReady(actor);
+    if (!isRaceMode(mode)) {
+      await turnReady(actor); await send(actor, 'bid', { value: 3 });
+      await until(() => players.every(client => client.state?.phase === 'playing')); await settle(players);
+    }
+    await turnReady(actor);
     if (isSkillMode(mode)) {
       const self = actor.state.players.find(p => p.id === actor.id);
       const card = self.skill.id === 'upgrade' ? self.hand.find(canUpgrade) : self.hand[0];
@@ -70,9 +73,13 @@ for (const mode of ['classic', 'skills', 'four', 'fourSkills']) {
       }
     }
     await settle(players);
-    const card = actor.state.players.find(p => p.id === actor.id).hand.at(-1);
+    const card = isRaceMode(mode) ? actor.state.players.find(p => p.id === actor.id).hand.find(p => p.id === 1) : actor.state.players.find(p => p.id === actor.id).hand.at(-1);
     await send(actor, 'play', { cards: [card.id] });
     await until(() => players.every(client => client.state?.lastPlay?.cards[0].id === card.id));
+    if (isRaceMode(mode)) {
+      assert.equal(actor.state.players.find(p => p.id === actor.id).hand.length, 18);
+      assert.equal(actor.state.players.find(p => p.id === actor.id).playedCount, 1);
+    }
     // Reconnect the HTTP-polling player over WebSocket and verify its seat and hand survive.
     const old = players[1], oldHand = old.state.players.find(p => p.id === old.id).hand;
     old.socket.disconnect(); const resumed = await connect(['websocket'], old.token);

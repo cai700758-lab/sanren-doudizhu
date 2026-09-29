@@ -17,6 +17,7 @@
     "test:online": "node test/online.mjs",
     "test:four": "node test/four.mjs",
     "test:four-skills": "node test/four-skills.mjs",
+    "test:race": "node test/race.mjs",
     "test:landscape": "node test/landscape.mjs"
   },
   "dependencies": { "express": "^5.1.0", "socket.io": "^4.8.1" },

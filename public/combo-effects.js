@@ -10,6 +10,7 @@ const effects = {
   fourPair: { family: 'four', title: '四带两对', duration: 1200 },
   bomb: { family: 'bomb', title: '炸弹', duration: 1700 },
   rocket: { family: 'rocket', title: '王炸', duration: 1800 },
+  superBomb: { family: 'bomb', title: '五个三', duration: 2000 },
 };
 export const comboEffect = type => Object.hasOwn(effects, type) ? effects[type] : null;
 

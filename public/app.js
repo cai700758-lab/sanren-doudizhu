@@ -1,4 +1,4 @@
-import { classify as classifyCards, beats, findHint as hintCards, findClosestSelection as closestCards, rankLabel, MODES, modeRules, isFourMode, isSkillMode } from '/game.js';
+import { classify as classifyCards, beats, findHint as hintCards, findClosestSelection as closestCards, rankLabel, MODES, modeRules, isFourMode, isSkillMode, isRaceMode } from '/game.js';
 import { tableCues } from './table-cues.js';
 import { createTableSound } from './sound.js';
 import { comboEffect, comboArtwork } from './combo-effects.js';
@@ -64,7 +64,7 @@ let state = null, selected = new Set(), busy = false, connected = false, clockOf
 let selectionAssistTimer, selectionAdjustment = null;
 let roomMode = Object.hasOwn(MODES, storage.get('sanren-mode', true)) ? storage.get('sanren-mode', true) : 'classic';
 $('#create-options [name="room-size"][value="' + modeRules(roomMode).players + '"]').checked = true;
-$('#create-options [name="room-kind"][value="' + (isSkillMode(roomMode) ? 'skills' : 'classic') + '"]').checked = true;
+$('#create-options [name="room-kind"][value="' + (isRaceMode(roomMode) ? 'race' : isSkillMode(roomMode) ? 'skills' : 'classic') + '"]').checked = true;
 const classify = cards => classifyCards(cards, state?.mode);
 const findHint = (cards, target) => hintCards(cards, target, state?.mode);
 const findClosestSelection = (cards, target) => closestCards(cards, target, state?.mode);
@@ -77,7 +77,8 @@ const skillUI = createSkillUI({ getState: () => state, send, cardHTML, getSelect
   isBlocked: () => !connected || busy || inTransition() });
 $('#rules-dialog .rules-content').insertAdjacentHTML('afterbegin', '<h3>三人经典</h3>');
 $('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', '<h3>四人经典与四人技能</h3><p>两副牌共 108 张，每人 25 张，地主拿 8 张底牌后共 33 张。一位地主对抗三位农民，任一农民出完即为农民阵营获胜。全部准备才开局；四人都不叫则重新发牌，连续三家不出后由上一位出牌者领出。</p><p>可出单张、对子、三张、三带二、顺子、连对、飞机及飞机带对子。不能三带一、飞机带单或四带二；飞机翅膀为不同点数的对子，不能复用主体点数。两个小王或两个大王可作对子，一小王加一大王不能出。四至八张同点数为炸弹，先比张数再比点数；两小王加两大王是最大的四王炸。2 和王不能进入顺子、连对或飞机主体。</p><p>本游戏四人计分：叫分为初始倍数，每个炸弹、四王炸、春天各翻倍；地主得失三份积分，每位农民一份。八张炸弹和四王炸不会直接判胜，没有农民出炸数量限制。四人技能在上述四人规则下，每人额外获得一个技能。</p>');
-$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', `<h3>技能模式</h3><p>建房时选择技能模式。每人发牌时随机获得一个技能，可能与其他玩家相同。只能在自己的出牌回合使用，每局一次；使用后继续出牌，回合计时不重置。</p><ul>${Object.values(SKILLS).map(skill => `<li><strong>${skill.name}</strong>：${skill.description}</li>`).join('')}</ul><p>随机牌来自完整的 54 张牌，包含大小王，可以与已有牌重复。万能牌可替代大小王，仍需组成合法牌型；炸弹按当前人数的牌型规则判定。赠牌或弃牌清空自己的手牌时直接获胜。四选一的候选牌仅本人可见，超时会选第一张并继续托管。</p>`);
+$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', `<h3>技能模式</h3><p>建房时选择技能模式。每人发牌时随机获得一个技能，可能与其他玩家相同。只能在自己的出牌回合使用，每局一次；使用后继续出牌，回合计时不重置。</p><ul>${Object.values(SKILLS).map(skill => `<li><strong>${skill.name}</strong>：${skill.description}</li>`).join('')}</ul><p>随机牌来自完整的 54 张牌，包含大小王，可以与已有牌重复。万能牌可替代大小王，仍需组成合法牌型；炸弹按当前人数的牌型规则判定。赠牌、弃小牌或顺手牵羊使任一玩家清空手牌时，该玩家直接获胜。四选一的候选牌仅本人可见，超时会选第一张并继续托管。</p>`);
+$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', '<h3>三人竞速</h3><p>三人各自为战。开局只洗第一副牌，三人各得18张；持有第一副红桃3的玩家先出，首手必须包含这张牌。没有叫分、地主和技能。每次打出几张，就从第二副牌的抽牌堆补回几张，手牌保持18张；抽牌堆用完后，弃牌重新洗入抽牌堆。最先累计打出30张牌的玩家获胜。</p><p>牌型和三人经典一致，包含三带一、两王炸。竞速模式额外允许五张3组成“五个三”，大于两王炸，是最大牌型。其他五张同点数不作为炸弹。</p>');
 const initialCode = new URLSearchParams(location.search).get('room');
 if (/^\d{6}$/.test(initialCode || '')) $('#room-code').value = initialCode;
 $('#nickname').value = storage.get('sanren-name', true) || '';
@@ -165,12 +166,19 @@ function entryName() {
   return name;
 }
 $('#entry-form').addEventListener('submit', event => { event.preventDefault(); if (entryName()) $('#create-dialog').showModal(); });
+$('#create-options [name="room-size"][value="4"]').addEventListener('change', () => {
+  const race = $('#create-options [name="room-kind"][value="race"]');
+  race.disabled = true;
+  if (race.checked) $('#create-options [name="room-kind"][value="classic"]').checked = true;
+});
+$('#create-options [name="room-size"][value="3"]').addEventListener('change', () => { $('#create-options [name="room-kind"][value="race"]').disabled = false; });
+if (modeRules(roomMode).players === 4) $('#create-options [name="room-kind"][value="race"]').disabled = true;
 $('#join-button').addEventListener('click', () => { if (entryName()) { $('#join-error').textContent = ''; $('#join-dialog').showModal(); $('#room-code').focus(); } });
 $('#create-options').addEventListener('submit', event => {
   event.preventDefault();
   const players = Number($('#create-options [name="room-size"]:checked').value);
-  const skills = $('#create-options [name="room-kind"]:checked').value === 'skills';
-  roomMode = players === 4 ? (skills ? 'fourSkills' : 'four') : (skills ? 'skills' : 'classic');
+  const kind = $('#create-options [name="room-kind"]:checked').value;
+  roomMode = players === 4 ? (kind === 'skills' ? 'fourSkills' : 'four') : kind === 'race' ? 'race' : kind === 'skills' ? 'skills' : 'classic';
   storage.set('sanren-mode', roomMode, true);
   $('#create-error').textContent = '';
   const name = entryName(); if (name) send('create', { name, mode: roomMode });
@@ -189,13 +197,14 @@ function cardHTML(card, { mini = false, interactive = false } = {}) {
     ? `<button class="${classes}" data-card="${card.id}" data-card-id="${card.id}" data-rank="${card.rank}" aria-label="${name}" aria-pressed="${isSelected}" type="button">${content}</button>`
     : `<span class="${classes}" data-card-id="${card.id}" data-rank="${card.rank}" role="img" aria-label="${name}">${content}</span>`;
 }
-const role = p => (state.landlordId ? (p.id === state.landlordId ? '地主' : '农民') : p.id === state.hostId ? '房主' : '牌友') + (p.bot ? ' · 人机' : '');
+const role = p => (isRaceMode(state.mode) ? '竞速' : state.landlordId ? (p.id === state.landlordId ? '地主' : '农民') : p.id === state.hostId ? '房主' : '牌友') + (p.bot ? ' · 人机' : '');
 function roleHTML(p) {
-  const type = state.landlordId ? (p.id === state.landlordId ? 'landlord' : 'farmer') : 'waiting';
-  const labels = { landlord: '地主', farmer: '农民', waiting: p.id === state.hostId ? '房主' : '牌友' };
+  const type = isRaceMode(state.mode) ? 'race' : state.landlordId ? (p.id === state.landlordId ? 'landlord' : 'farmer') : 'waiting';
+  const labels = { landlord: '地主', farmer: '农民', race: '竞速', waiting: p.id === state.hostId ? '房主' : '牌友' };
   const icons = {
     landlord: '<path d="m2 6 3 3 3-5 4 5 3-3-1 8H3L2 6Z"/><path d="M3 16h11"/>',
     farmer: '<path d="M8 16V7M8 10C5 10 3 8 3 5c3 0 5 2 5 5ZM8 8c0-3 2-5 5-5 0 3-2 5-5 5ZM5 16h6"/>',
+    race: '<path d="M8 2v9m-3-6 3-3 3 3M3 15h10M5 12h6"/>',
     waiting: '<path d="m8 2 2 4 4 2-4 2-2 4-2-4-4-2 4-2 2-4Z"/>',
     bot: '<rect x="2" y="5" width="12" height="9" rx="2"/><path d="M8 5V2m-3 14h6M5 9h.01M11 9h.01"/>',
   };
@@ -228,7 +237,7 @@ function opponentHandHTML(p) {
 }
 function playerHTML(p, mine = false) {
   if (!p) return '<div class="empty-seat"><div class="avatar">+</div><span>等待加入</span></div>';
-  return `<div class="player-info">${avatarHTML(p)}<div><div class="player-name" title="${escape(p.name)}">${escape(p.name)}${mine ? ' · 你' : ''}</div><div class="player-role" aria-label="${role(p)}${!p.connected ? ' · 离线' : ''}">${roleHTML(p)}${!p.connected ? '<span class="role-offline">离线</span>' : ''}</div></div></div>${!mine ? `${opponentHandHTML(p)}<div class="seat-status"><span class="player-status">${!active() ? (p.ready ? '已准备 ✓' : '未准备') : escape(p.lastAction)}</span>${active() || state.phase === 'finished' ? `<span class="player-count${p.count <= 2 ? ' danger' : ''}"><strong>${p.count}</strong>张</span>` : ''}</div>` : ''}${p.bot && !active() && state.hostId === state.me ? `<button class="text-button bot-remove" data-action="remove-bot" data-bot-id="${escape(p.id)}" aria-label="移除机器人${escape(p.name)}">移除</button>` : ''}`;
+  return `<div class="player-info">${avatarHTML(p)}<div><div class="player-name" title="${escape(p.name)}">${escape(p.name)}${mine ? ' · 你' : ''}</div><div class="player-role" aria-label="${role(p)}${!p.connected ? ' · 离线' : ''}">${roleHTML(p)}${!p.connected ? '<span class="role-offline">离线</span>' : ''}</div></div></div>${!mine ? `${opponentHandHTML(p)}<div class="seat-status"><span class="player-status">${!active() ? (p.ready ? '已准备 ✓' : '未准备') : escape(p.lastAction)}</span>${active() || state.phase === 'finished' ? isRaceMode(state.mode) ? `<span class="race-progress" aria-label="已打出${p.playedCount}张，目标30张">${p.playedCount}/30</span>` : `<span class="player-count${p.count <= 2 ? ' danger' : ''}"><strong>${p.count}</strong>张</span>` : ''}</div>` : ''}${p.bot && !active() && state.hostId === state.me ? `<button class="text-button bot-remove" data-action="remove-bot" data-bot-id="${escape(p.id)}" aria-label="移除机器人${escape(p.name)}">移除</button>` : ''}`;
 }
 function render() {
   $('#lobby').hidden = Boolean(state); $('#game').hidden = !state;
@@ -236,13 +245,15 @@ function render() {
   document.body.classList.toggle('landscape-mode', landscapeTable.matches);
   document.body.classList.toggle('skills-mode', isSkillMode(state?.mode));
   document.body.classList.toggle('four-mode', isFourMode(state?.mode));
+  document.body.classList.toggle('race-mode', isRaceMode(state?.mode));
   $('#table-nav-label').textContent = state ? '当前牌桌' : '开始游戏';
   document.title = state ? `房间 ${state.code} · ${modeRules(state.mode).name}` : '三人局 · 联机斗地主';
   if (!state) { connectionUI(); return; }
   $('#room-title').textContent = state.code;
   $('#round-label').textContent = `${modeRules(state.mode).name} · ${state.round ? `第 ${String(state.round).padStart(2, '0')} 局 · ${{ waiting: '等待加入', bidding: '叫分中', playing: '对局中', finished: '本局结束' }[state.phase]}` : '等待开局'}`;
   $('.arena').dataset.phase = state.phase;
-  $('#multiplier-label').textContent = state.landlordId ? `当前倍数 × ${state.multiplier}` : `${capacity()} 人 · ${isFourMode(state.mode) ? 108 : 54} 张牌`;
+  $('#multiplier-label').textContent = isRaceMode(state.mode) ? `先打出30张 · 牌堆 ${state.round ? state.drawCount : '待发牌'}` : state.landlordId ? `当前倍数 × ${state.multiplier}` : `${capacity()} 人 · ${isFourMode(state.mode) ? 108 : 54} 张牌`;
+  $('.sidebar-note p').textContent = isRaceMode(state.mode) ? '每回合 45 秒。超时自动不出；领出时自动打一张牌。每打出一张，就补回一张。' : '每回合 45 秒。超时自动不叫或不出，领出时自动打一张最小牌。';
   const index = state.players.findIndex(p => p.id === state.me);
   // Turn order is self → right → left; consistent on every device.
   const right = state.players[(index + 1) % capacity()];
@@ -254,8 +265,8 @@ function render() {
   $('#top-player').innerHTML = capacity() === 4 ? playerHTML(top) : '';
   $('#top-play').hidden = capacity() !== 4;
   $('#my-player').innerHTML = playerHTML(me(), true);
-  $('#bottom-label').textContent = state.landlordId ? '地主底牌 · 已公开' : '地主底牌';
-  $('#bottom-cards').innerHTML = state.bottom.length ? ascending(state.bottom).map(c => cardHTML(c, { mini: true })).join('') : '<span class="playing-card mini back"></span>'.repeat(modeRules(state.mode).bottom);
+  $('#bottom-label').textContent = isRaceMode(state.mode) ? '抽牌堆' : state.landlordId ? '地主底牌 · 已公开' : '地主底牌';
+  $('#bottom-cards').innerHTML = isRaceMode(state.mode) ? `<span class="draw-count">${state.round ? `${state.drawCount} 张` : '待发牌'}</span>` : state.bottom.length ? ascending(state.bottom).map(c => cardHTML(c, { mini: true })).join('') : '<span class="playing-card mini back"></span>'.repeat(modeRules(state.mode).bottom);
   renderCenter(); renderPlayedCards(left, right, top); renderActions(); renderHand(); renderScores(); tick();
 }
 function renderCenter() {
@@ -309,7 +320,7 @@ function renderActions() {
     message = me().ready ? '已准备' : '';
     if (state.phase === 'finished') {
       const delta = state.result.deltas.find(d => d.id === state.me).delta;
-      message = `${delta > 0 ? '获胜 +' : '本局 '}${delta} 分 · 已准备 ${state.players.filter(p => p.ready).length}/${capacity()}`;
+      message = isRaceMode(state.mode) ? `${state.players.find(p => p.id === state.result.winnerId).name}率先打出30张 · 已准备 ${state.players.filter(p => p.ready).length}/${capacity()}` : `${delta > 0 ? '获胜 +' : '本局 '}${delta} 分 · 已准备 ${state.players.filter(p => p.ready).length}/${capacity()}`;
     }
   } else if (state.phase === 'bidding') {
     message = myTurn() ? '轮到你叫分' : `等待 ${state.players.find(p => p.id === state.turnId).name} 叫分`;
@@ -317,7 +328,7 @@ function renderActions() {
   } else {
     message = myTurn() ? (state.lastPlay ? '轮到你出牌' : '轮到你领出') : `等待 ${state.players.find(p => p.id === state.turnId).name} 出牌`;
     const selectedCards = effectiveHand().filter(c => selected.has(c.id));
-    const valid = beats(classify(selectedCards), state.lastPlay?.combo);
+    const valid = beats(classify(selectedCards), state.lastPlay?.combo) && (!state.openingLead || selectedCards.some(card => card.id === 1));
     html = button('pass', '不出', false, !myTurn() || !state.lastPlay) + button('hint', '提示', false, !myTurn()) + button('clear', '重选', false, !selected.size) + button('play', '出牌', true, !myTurn() || !valid);
   }
   $('#actions').innerHTML = html;
@@ -331,11 +342,12 @@ function renderSelection() {
   message.classList.remove('invalid');
   if (me().skill?.pending) { message.textContent = '请点击「选牌」完成四选一'; return; }
   if (state.phase !== 'playing' || !selected.size) {
-    message.textContent = state.phase === 'playing' ? '点击或滑动选牌，再次选中取消' : state.phase === 'finished' ? `${state.result.landlordWon ? '地主' : '农民'}获胜${state.result.spring ? ' · 春天翻倍' : ''} · ${state.result.multiplier} 倍` : '';
+    message.textContent = state.phase === 'playing' ? state.openingLead && myTurn() ? '首手须包含红桃3' : isRaceMode(state.mode) ? `已打 ${me().playedCount}/30 · 每出一张补一张` : '点击或滑动选牌，再次选中取消' : state.phase === 'finished' ? isRaceMode(state.mode) ? `${state.players.find(p => p.id === state.result.winnerId).name}获胜 · 率先打出30张` : `${state.result.landlordWon ? '地主' : '农民'}获胜${state.result.spring ? ' · 春天翻倍' : ''} · ${state.result.multiplier} 倍` : '';
     return;
   }
   const combo = classify(effectiveHand().filter(c => selected.has(c.id)));
   if (!combo) { message.textContent = `已选 ${selected.size} 张 · 暂未组成有效牌型`; message.classList.add('invalid'); }
+  else if (state.openingLead && !effectiveHand().filter(c => selected.has(c.id)).some(card => card.id === 1)) { message.textContent = '首手须包含红桃3'; message.classList.add('invalid'); }
   else if (!beats(combo, state.lastPlay?.combo)) { message.textContent = `${combo.name} · 压不过上一手牌`; message.classList.add('invalid'); }
   else if (selectionAdjustment) message.innerHTML = `已整理为${escape(combo.name)} · ${selected.size} 张 <button type="button" class="selection-undo" data-action="undo-selection">撤销</button>`;
   else message.textContent = `已选 ${selected.size} 张 · ${combo.name}`;
@@ -447,7 +459,7 @@ function presentTableCues(previous, next) {
     } else if (cue.kind === 'win' || cue.kind === 'lose') {
       cueLater(() => {
         tableSound.play(cue.kind); reactAtSeat(cue.playerId, 'win');
-        eventBanner(cue.kind, cue.kind === 'win' ? '胜利' : '本局惜败', `${next.result.landlordWon ? '地主' : '农民'}获胜${next.result.spring ? ' · 春天' : ''}`, `${cue.delta > 0 ? '+' : ''}${cue.delta} 分`);
+        eventBanner(cue.kind, cue.kind === 'win' ? '胜利' : '本局惜败', isRaceMode(next.mode) ? `${next.players.find(p => p.id === next.result.winnerId).name}率先打出30张` : `${next.result.landlordWon ? '地主' : '农民'}获胜${next.result.spring ? ' · 春天' : ''}`, isRaceMode(next.mode) ? '' : `${cue.delta > 0 ? '+' : ''}${cue.delta} 分`);
         for (const score of document.querySelectorAll('.score-value')) moveCard(score, [{ transform: 'scale(.8)', opacity: .4 }, { transform: 'scale(1.15)', offset: .65 }, { transform: 'scale(1)', opacity: 1 }], { duration: 650 });
       }, emphasisDelay || 450);
     }
@@ -456,7 +468,7 @@ function presentTableCues(previous, next) {
 
 function renderScores() {
   $('#player-count').textContent = `${state.players.length} / ${capacity()}`;
-  $('#scores').innerHTML = state.players.map(p => `<div class="score-row">${avatarHTML(p)}<div><div class="player-name">${escape(p.name)}${p.id === state.me ? ' · 你' : ''}</div><small>${role(p)} · ${p.connected ? '在线' : '离线'}</small></div><span class="score-value">${p.score > 0 ? '+' : ''}${p.score}</span></div>`).join('');
+  $('#scores').innerHTML = state.players.map(p => `<div class="score-row">${avatarHTML(p)}<div><div class="player-name">${escape(p.name)}${p.id === state.me ? ' · 你' : ''}</div><small>${role(p)} · ${isRaceMode(state.mode) ? `已打 ${p.playedCount}/30 · ` : ''}${p.connected ? '在线' : '离线'}</small></div><span class="score-value">${isRaceMode(state.mode) ? `${p.score}胜` : `${p.score > 0 ? '+' : ''}${p.score}`}</span></div>`).join('');
   $('#game-log').innerHTML = state.log.map(text => `<li>${escape(text)}</li>`).join('');
   $('#game-log').scrollTop = $('#game-log').scrollHeight;
 }
@@ -622,7 +634,7 @@ function flyToCard(node, source, delay = 0, duration = 700) {
 }
 function animateTableUpdate(previous, next, origins) {
   if (!previous || !next || previous.code !== next.code || reducedMotion.matches || document.visibilityState !== 'visible') return;
-  if (next.dealId !== previous.dealId && next.phase === 'bidding') {
+  if (next.dealId !== previous.dealId && ['bidding', 'playing'].includes(next.phase)) {
     $('.arena').dataset.motion = 'shuffle';
     const layer = $('#animation-layer');
     layer.innerHTML = '<div class="shuffle-deck"><span class="playing-card back"></span><span class="playing-card back"></span><span class="playing-card back"></span><span class="shuffle-label">洗牌中</span></div>';
@@ -654,7 +666,12 @@ function animateTableUpdate(previous, next, origins) {
     if (previous.tablePlays?.[id]?.sequence === play.sequence) continue;
     zone.querySelectorAll('.playing-card').forEach((card, i) => {
       const source = id === next.me ? origins.hand.get(Number(card.dataset.cardId)) : zone.id === 'left-play' ? origins.left : zone.id === 'top-play' ? origins.top : origins.right;
-      flyToCard(card, source, i * 12, ['bomb', 'rocket'].includes(play.combo.type) ? 650 : 420);
+      flyToCard(card, source, i * 12, ['bomb', 'rocket', 'superBomb'].includes(play.combo.type) ? 650 : 420);
+    });
+  }
+  if (isRaceMode(next.mode) && next.me === previous.turnId && next.players.find(p => p.id === next.me).playedCount > previous.players.find(p => p.id === next.me).playedCount) {
+    $('#hand').querySelectorAll('[data-card-id]').forEach(card => {
+      if (!origins.hand.has(Number(card.dataset.cardId))) flyToCard(card, origins.bottom, 250, 600);
     });
   }
   for (const zone of document.querySelectorAll('.player-play.has-pass')) {
@@ -688,7 +705,7 @@ document.addEventListener('click', async event => {
   if (action === 'pass') { if (await send('pass')) { selected.clear(); renderHand(); renderActions(); } }
   if (action === 'clear') { selected.clear(); renderHand(); renderActions(); }
   if (action === 'hint') {
-    const hint = isSkillMode(state.mode) ? findSkillHint(me().hand, state.lastPlay?.combo, state.mode) : findHint(me().hand, state.lastPlay?.combo);
+    const hint = state.openingLead ? [me().hand.find(card => card.id === 1)] : isSkillMode(state.mode) ? findSkillHint(me().hand, state.lastPlay?.combo, state.mode) : findHint(me().hand, state.lastPlay?.combo);
     for (const card of hint || []) if (card.wild) wildRanks[card.id] = card.rank;
     selected = new Set(hint?.map(c => c.id)); renderHand(); renderActions();
     if (!hint) toast('没有能压过的牌，可以选择「不出」。');

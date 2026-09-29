@@ -718,6 +718,7 @@ body.in-game { background: var(--color-table-room); color: var(--color-table-tex
 .in-game .role-tag svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
 .in-game .role-landlord { background: var(--color-table-gold); color: var(--color-table-room); }
 .in-game .role-farmer { background: var(--color-felt-light); color: var(--color-table-room); }
+.in-game .role-race { background: var(--color-table-gold); color: var(--color-table-room); }
 .in-game .role-bot { background: var(--color-blue-soft); color: var(--color-blue); }
 .in-game .role-waiting { background: var(--color-table-rail); color: var(--color-table-text); box-shadow: inset 0 0 0 1px var(--color-table-line); }
 .in-game .role-offline { color: var(--color-table-alert); font-weight: 800; }
@@ -1132,6 +1133,10 @@ body:not(.in-game) .site-header .connection { display: none; }
 .choice-grid input:active + span { transform: translateY(2px); box-shadow: none; }
 .choice-grid input:disabled + span { opacity: .45; cursor: not-allowed; }
 .choice-grid label:hover span { border-color: var(--color-accent-edge); }
+.choice-grid .race-choice { grid-column: 1 / -1; }
+.race-progress { display: inline-flex; align-items: center; flex-shrink: 0; color: var(--color-table-gold); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.race-mode .bottom-area { color: var(--color-table-gold); font-weight: 800; }
+.race-mode .draw-count { display: inline-block; margin-top: 4px; font-size: 15px; font-variant-numeric: tabular-nums; }
 #join-options > label { display: block; margin: 0 0 8px; font-size: 13px; font-weight: 750; }
 #create-options .form-error, #join-options .form-error { min-height: 18px; padding: 0; margin: 0 0 8px; }
 @media (width < 600px) and (height < 760px) {

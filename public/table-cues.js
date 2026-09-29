@@ -2,7 +2,7 @@
 import { comboEffect } from './combo-effects.js';
 export function tableCues(previous, next) {
   if (!previous || !next || previous.code !== next.code) return [];
-  if (next.dealId !== previous.dealId && next.phase === 'bidding') return [{ kind: 'deal' }];
+  if (next.dealId !== previous.dealId && ['bidding', 'playing'].includes(next.phase)) return [{ kind: 'deal' }];
   if (previous.round !== next.round || previous.dealId !== next.dealId) return [];
   const cues = [];
   if (previous.phase === 'bidding' && next.phase === 'playing') cues.push({ kind: 'landlord', playerId: next.landlordId });
@@ -10,7 +10,7 @@ export function tableCues(previous, next) {
     const play = next.tablePlays?.[player.id];
     if (play && play.sequence !== previous.tablePlays?.[player.id]?.sequence) {
       cues.push({ kind: comboEffect(play.combo.type) ? play.combo.type : 'play', playerId: player.id });
-      if (next.phase === 'playing' && player.count > 0 && player.count <= 2) {
+      if (next.mode !== 'race' && next.phase === 'playing' && player.count > 0 && player.count <= 2) {
         cues.push({ kind: 'warning', playerId: player.id, count: player.count });
       }
     }

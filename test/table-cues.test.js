@@ -33,6 +33,15 @@ test('redeals and passes are distinct from ordinary plays', () => {
   assert.deepEqual(tableCues(previous, { ...base(), dealId: 2, phase: 'bidding' }), [{ kind: 'deal' }]);
   assert.deepEqual(tableCues(previous, { ...base(), tablePasses: { b: { sequence: 4 } } }), [{ kind: 'pass', playerId: 'b' }]);
 });
+test('race deal and five threes present correctly without a low-hand warning', () => {
+  const previous = { ...base(), mode: 'race', phase: 'waiting', dealId: 0 };
+  const next = { ...base(), mode: 'race' };
+  assert.deepEqual(tableCues(previous, next), [{ kind: 'deal' }]);
+  next.tablePlays.a = { sequence: 1, combo: { type: 'superBomb' } };
+  next.players[0].count = 1;
+  assert.deepEqual(tableCues({ ...next, tablePlays: {} }, next), [{ kind: 'superBomb', playerId: 'a' }]);
+  assert.equal(comboEffect('superBomb').family, 'bomb');
+});
 test('all special shapes trigger their own animation and retain the exact combo name', () => {
   for (const type of ['straight', 'pairStraight', 'airplane', 'airplaneSingle', 'airplanePair', 'tripleSingle', 'triplePair', 'fourSingle', 'fourPair']) {
     const previous = base(), next = base();
