@@ -78,7 +78,7 @@ const skillUI = createSkillUI({ getState: () => state, send, cardHTML, getSelect
 $('#rules-dialog .rules-content').insertAdjacentHTML('afterbegin', '<h3>三人经典</h3>');
 $('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', '<h3>四人经典与四人技能</h3><p>两副牌共 108 张，每人 25 张，地主拿 8 张底牌后共 33 张。一位地主对抗三位农民，任一农民出完即为农民阵营获胜。全部准备才开局；四人都不叫则重新发牌，连续三家不出后由上一位出牌者领出。</p><p>可出单张、对子、三张、三带二、顺子、连对、飞机及飞机带对子。不能三带一、飞机带单或四带二；飞机翅膀为不同点数的对子，不能复用主体点数。两个小王或两个大王可作对子，一小王加一大王不能出。四至八张同点数为炸弹，先比张数再比点数；两小王加两大王是最大的四王炸。2 和王不能进入顺子、连对或飞机主体。</p><p>本游戏四人计分：叫分为初始倍数，每个炸弹、四王炸、春天各翻倍；地主得失三份积分，每位农民一份。八张炸弹和四王炸不会直接判胜，没有农民出炸数量限制。四人技能在上述四人规则下，每人额外获得一个技能。</p>');
 $('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', `<h3>技能模式</h3><p>建房时选择技能模式。每人发牌时随机获得一个技能，可能与其他玩家相同。只能在自己的出牌回合使用，每局一次；使用后继续出牌，回合计时不重置。</p><ul>${Object.values(SKILLS).map(skill => `<li><strong>${skill.name}</strong>：${skill.description}</li>`).join('')}</ul><p>随机牌来自完整的 54 张牌，包含大小王，可以与已有牌重复。万能牌可替代大小王，仍需组成合法牌型；炸弹按当前人数的牌型规则判定。赠牌、弃小牌或顺手牵羊使任一玩家清空手牌时，该玩家直接获胜。四选一的候选牌仅本人可见，超时会选第一张并继续托管。</p>`);
-$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', `<h3>三人竞速</h3><p>三人各自为战。开局只洗第一副牌，三人各得18张；持有第一副红桃3的玩家先出，首手必须包含这张牌。没有叫分、地主和技能。每次打出几张，就从抽牌堆补回几张；选择“不出”可摸一张，手牌因此可能超过18张。抽牌堆用完后，弃牌重新洗入抽牌堆。最先累计打出${RACE_TARGET}张牌的玩家获胜。</p><p>牌型和三人经典一致，包含三带一、两王炸。竞速模式额外允许五张3组成“五个三”，大于两王炸，是最大牌型。其他五张同点数不作为炸弹。</p>`);
+$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', `<h3>三人竞速</h3><p>三人各自为战。开局只洗第一副牌，三人各得18张；持有第一副红桃3的玩家先出，首手必须包含这张牌。没有叫分、地主和技能。每次打出几张，就从抽牌堆补回几张；选择“不出”可摸一张，手牌因此可能超过18张。抽牌堆用完后，弃牌重新洗入抽牌堆。最先累计打出${RACE_TARGET}张牌的玩家获胜。</p><p>牌型和三人经典一致，包含三带一、两王炸。竞速模式允许四至八张同点数炸弹，张数多者更大，同张数比点数。两王炸大于四张炸弹，小于五张及以上炸弹；五个三是最小的五张炸弹，也能压过两王炸。</p>`);
 const initialCode = new URLSearchParams(location.search).get('room');
 if (/^\d{6}$/.test(initialCode || '')) $('#room-code').value = initialCode;
 $('#nickname').value = storage.get('sanren-name', true) || '';
@@ -457,7 +457,7 @@ function presentTableCues(previous, next) {
       eventBanner('landlord', '地主就位', `${player.name} · ${next.highestBid} 分`);
     } else if (effect) {
       tableSound.play(effect.family); reactAtSeat(cue.playerId, cue.kind);
-      const detail = ['bomb', 'rocket'].includes(cue.kind) ? '倍数 ×2' : `${next.tablePlays[cue.playerId].cards.length} 张`;
+      const detail = !isRaceMode(next.mode) && ['bomb', 'rocket'].includes(cue.kind) ? '倍数 ×2' : `${next.tablePlays[cue.playerId].cards.length} 张`;
       eventBanner(cue.kind, next.tablePlays[cue.playerId].combo.name, `${player.name} · ${detail}`, '', effect, next.tablePlays[cue.playerId].cards);
       emphasisDelay = effect.duration + 50;
     } else if (cue.kind === 'warning') {

@@ -91,18 +91,59 @@ test('race passing safely handles an empty stock and discard pile', async t => {
   assert.equal(room.players.reduce((sum, player) => sum + player.hand.length, 0), 108);
 });
 
-test('race five threes outrank the two-joker rocket without changing classic rules', () => {
+test('race five- through eight-card bombs follow size, rank and rocket priority', () => {
   const deck = makeDeck('race'), threes = deck.filter(card => card.rank === 3).slice(0, 5);
   const rocket = [deck[52], deck[53]];
+  const bomb = (rank, size) => deck.filter(card => card.rank === rank).slice(0, size);
   assert.equal(deck.length, 108);
   assert.equal(classify(threes, 'race').type, 'superBomb');
   assert.equal(classify(threes, 'classic'), null);
-  assert.equal(classify(deck.filter(card => card.rank === 4).slice(0, 5), 'race'), null);
+  for (let size = 5; size <= 8; size++) {
+    assert.equal(classify(bomb(4, size), 'race').type, 'bomb');
+    assert.equal(classify(bomb(4, size), 'race').size, size);
+    assert.equal(classify(bomb(4, size), 'race').name, `${size}张炸弹`);
+    assert.equal(classify(bomb(4, size), 'classic'), null);
+  }
+  assert.equal(classify([...bomb(4, 8), bomb(5, 1)[0]], 'race'), null);
   assert.equal(beats(classify(threes, 'race'), classify(rocket, 'race')), true);
   assert.equal(beats(classify(rocket, 'race'), classify(threes, 'race')), false);
+  assert.equal(beats(classify(bomb(4, 4), 'race'), classify(rocket, 'race')), false);
+  assert.equal(beats(classify(rocket, 'race'), classify(bomb(4, 4), 'race')), true);
+  assert.equal(beats(classify(bomb(4, 5), 'race'), classify(threes, 'race')), true);
+  assert.equal(beats(classify(bomb(3, 6), 'race'), classify(bomb(15, 5), 'race')), true);
+  assert.equal(beats(classify(bomb(4, 5), 'race'), classify(bomb(3, 6), 'race')), false);
+  assert.equal(beats(classify(bomb(5, 6), 'race'), classify(bomb(4, 6), 'race')), true);
+  assert.equal(beats(classify(rocket, 'race'), classify(bomb(4, 8), 'race')), false);
   assert.deepEqual(new Set(findHint(threes, classify(rocket, 'race'), 'race').map(card => card.id)), new Set(threes.map(card => card.id)));
   assert.equal(findHint(rocket, classify(threes, 'race'), 'race'), null);
+  assert.deepEqual(new Set(findHint(bomb(4, 5), classify(rocket, 'race'), 'race').map(card => card.id)), new Set(bomb(4, 5).map(card => card.id)));
+  assert.equal(classify(findHint([...threes, ...bomb(4, 5)], classify(threes, 'race'), 'race'), 'race').rank, 4);
+  assert.equal(classify(findHint(bomb(3, 6), classify(bomb(15, 5), 'race'), 'race'), 'race').size, 6);
   assert.equal(findClosestSelection([...threes, deck[52]], classify(rocket, 'race'), 'race').length, 5);
+  assert.equal(classify(findClosestSelection([...bomb(4, 8), deck[52]], classify(bomb(3, 6), 'race'), 'race'), 'race').size, 8);
+});
+
+test('race server accepts a five-card bomb against a two-joker rocket', async t => {
+  const { players, room, ok } = await setup(t);
+  const owner = room.players[room.turn], client = players.find(player => player.id === owner.id);
+  await ok(client, 'play', { cards: [1] });
+  const five = [...room.players.flatMap(player => player.hand), ...room.drawPile, ...room.discardPile].filter(card => card.rank === 4).slice(0, 5);
+  const ids = new Set(five.map(card => card.id));
+  for (const player of room.players) player.hand = player.hand.filter(card => !ids.has(card.id));
+  room.drawPile = room.drawPile.filter(card => !ids.has(card.id));
+  room.discardPile = room.discardPile.filter(card => !ids.has(card.id));
+  owner.hand.push(...five);
+  clearTimeout(room.timer); room.turn = room.players.indexOf(owner); room.actionAt = 0;
+  const deck = makeDeck('race');
+  room.lastPlay = { playerId: room.players.find(player => player !== owner).id, cards: [deck[52], deck[53]], combo: classify([deck[52], deck[53]], 'race') };
+  await until(() => client.state.revision === room.revision);
+  await ok(client, 'play', { cards: five.map(card => card.id) });
+  assert.equal(room.tablePlays[owner.id].combo.type, 'bomb');
+  assert.equal(room.tablePlays[owner.id].combo.size, 5);
+  assert.equal(owner.playedCount, 6);
+  const physical = [...room.players.flatMap(player => player.hand), ...room.drawPile, ...room.discardPile];
+  assert.equal(physical.length, 108);
+  assert.equal(new Set(physical.map(card => card.id)).size, 108);
 });
 
 test('race recycles discards, keeps 108 physical cards, and finishes at 48 played cards', async t => {

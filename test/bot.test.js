@@ -31,6 +31,19 @@ test('bot passes unbeatable hands and blocks enemy near finish', () => {
   const choice = chooseBotPlay(cards([4, 8, 14]), { ...table, players: [{ id: 'lord', count: 1 }], lastPlay: { playerId: 'lord', combo: classify(cards([3])) } });
   assert.equal(choice[0].rank, 14);
 });
+test('race bot can answer a two-joker rocket with a five-card bomb', () => {
+  const deck = makeDeck('race');
+  const hand = deck.filter(card => card.rank === 4).slice(0, 5);
+  const rocket = [deck[52], deck[53]];
+  const move = chooseBotPlay(hand, {
+    ...table,
+    mode: 'race',
+    lastPlay: { playerId: 'lord', combo: classify(rocket, 'race') },
+  });
+  assert.equal(move.length, 5);
+  assert.equal(classify(move, 'race').type, 'bomb');
+  assert.equal(beats(classify(move, 'race'), classify(rocket, 'race')), true);
+});
 test('bot decisions are legal and use only its own cards across varied hands', () => {
   let seed = 741;
   const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; };
