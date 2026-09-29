@@ -67,7 +67,8 @@
   body.in-game.landscape-mode .player-play .play-caption { display: block; height: 12px; line-height: 12px; font-size: 9px; }
   body.in-game.landscape-mode .player-play .table-cards { height: 42px; margin: 0; padding-bottom: 2px; }
   body.in-game.landscape-mode .player-play .playing-card { padding-block: 2px; font-size: 13px; }
-  body.in-game.landscape-mode .player-play .playing-card .suit { margin-top: 0; }
+  body.in-game.landscape-mode .player-play .playing-card .suit { font-size: .78em; line-height: 1; margin-top: 1px; }
+  body.in-game.landscape-mode .player-play .playing-card .center-suit { font-size: .82em; line-height: 1; right: 3px; bottom: 3px; }
   body.in-game.landscape-mode .player-play .pass-label { font-size: 25px; line-height: 1.3; padding-top: 6px; }
   body.in-game.landscape-mode .my-zone { display: contents; }
   body.in-game.landscape-mode .actions { grid-row: 4; align-self: start; height: 44px; min-height: 44px; padding: 0; margin-inline: 142px; gap: 7px; flex-wrap: nowrap; }

@@ -36,6 +36,10 @@ try {
         const controls = [...document.querySelectorAll('#actions button')].map(rect);
         const hand = [...document.querySelectorAll('#hand .playing-card')].map(rect);
         const cards = [...document.querySelectorAll('.player-play .playing-card')];
+        const suitScales = cards.flatMap(card => {
+          const rankSize = parseFloat(getComputedStyle(card).fontSize);
+          return [...card.querySelectorAll('.suit, .center-suit')].map(suit => parseFloat(getComputedStyle(suit).fontSize) / rankSize);
+        });
         const clipped = cards.filter(card => {
           const b = rect(card), zone = rect(card.closest('.player-play')), scroll = card.closest('.table-cards'), s = rect(scroll);
           const index = rect(card.querySelector('.card-index'));
@@ -44,7 +48,7 @@ try {
         const footer = rect(document.querySelector('.my-footer'));
         const dock = document.querySelector('#skill-dock');
         return { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight,
-          clipped: clipped.length, rows: document.querySelectorAll('.hand-row').length,
+          clipped: clipped.length, suitScale: Math.max(...suitScales), rows: document.querySelectorAll('.hand-row').length,
           controls: controls.every(b => b.top >= 0 && b.bottom <= innerHeight && b.left >= 0 && b.right <= innerWidth && b.height >= 38),
           hand: hand.every(b => b.top >= Math.max(...controls.map(c => c.bottom)) && b.bottom <= footer.top + 1 && b.left >= 0 && b.right <= innerWidth),
           skill: dock.hidden || (rect(dock).top > innerHeight / 2 && hand.every(b => b.left >= rect(dock).right)),
@@ -54,6 +58,7 @@ try {
       });
       await page.screenshot({ path: `test-results/landscape-${mode}-${width}-${height}.png`, fullPage: true });
       assert.ok(geometry.width <= width && geometry.height <= height && geometry.controls && geometry.hand && geometry.skill && geometry.seats, `${mode} ${width}x${height}: ${JSON.stringify(geometry)}`);
+      assert.ok(geometry.suitScale <= .85, `${mode} ${width}x${height}: played-card suits should scale with the rank`);
       assert.equal(geometry.rows, ['skills', 'fourSkills'].includes(mode) ? 2 : 1); assert.equal(geometry.clipped, 0, `${mode} ${width}x${height}: clipped play cards`);
       assert.deepEqual(geometry.buttons, [], `${mode} ${width}x${height}: button text clipped`);
     }
