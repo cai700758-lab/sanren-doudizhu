@@ -967,12 +967,12 @@ body.in-game { background: var(--color-table-room); color: var(--color-table-tex
 #skill-content label { display: block; margin: 12px 0 6px; color: var(--color-ink); font-size: 13px; font-weight: 750; }
 #skill-content select { width: 100%; min-height: 44px; padding: 8px 10px; border: 2px solid var(--color-line); border-radius: 10px; background: var(--color-paper); color: var(--color-ink); font: 14px var(--font-body); }
 #skill-content select:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 2px; }
-.skill-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.skill-inspection { display: flex; justify-content: center; gap: 12px; margin: 14px 0; }
-.skill-inspection .playing-card { width: 64px; height: 90px; font-size: 24px; }
+.skill-choices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.skill-inspection { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 14px 0; }
+.skill-inspection .playing-card { width: 100%; height: 90px; font-size: 20px; }
 .skill-inspection-title { color: var(--color-ink); font-size: 14px; font-weight: 750; }
 .skill-choice { display: flex; justify-content: center; align-items: center; padding: 10px 3px; min-width: 0; }
-.skill-choice .playing-card { pointer-events: none; width: 54px; height: 76px; font-size: 22px; }
+.skill-choice .playing-card { pointer-events: none; width: min(54px, 100%); height: 76px; font-size: 20px; }
 #skill-dialog { max-width: min(420px, calc(100vw - 24px)); }
 .playing-card.wild-card { background: var(--color-table-gold); color: var(--color-table-room); }
 .wild-rank-label { display: block; font: 800 10px/1.1 var(--font-display); margin-top: 3px; white-space: nowrap; }

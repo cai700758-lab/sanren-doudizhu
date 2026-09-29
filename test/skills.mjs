@@ -49,7 +49,7 @@ try {
   for (const id of ['gift', 'reroll', 'clone', 'draw', 'draft', 'wild', 'peek', 'upgrade', 'remove']) {
     const p = room.players[leaderIndex];
     room.turn = leaderIndex; room.actionAt = 0; room.lastPlay = null; room.tablePlays = {}; room.tablePasses = {};
-    p.hand = sortCards(makeDeck().slice(0, id === 'draw' ? 22 : id === 'remove' ? 1 : 20));
+    p.hand = sortCards(makeDeck().slice(0, id === 'draw' ? 24 : id === 'remove' ? 1 : 20));
     if (id === 'upgrade') p.hand = sortCards(makeDeck().filter(card => card.rank >= 15));
     p.skill = { id, used: false, choices: null };
     await page.reload(); await page.locator('#skill-button:not([disabled])').waitFor();
@@ -64,29 +64,30 @@ try {
     await page.locator('#skill-button').click();
     if (id === 'upgrade') {
       assert.equal(await page.locator('#skill-card option').count(), 5, 'big joker is excluded');
-      await page.locator('#skill-card').selectOption(String(p.hand.find(card => card.rank === 16).id));
-      assert.ok((await page.locator('#skill-card option:checked').textContent()).includes('→ 大王'));
+      await page.locator('#skill-card').selectOption(String(p.hand.find(card => card.rank === 15).id));
+      await page.locator('#skill-steps').selectOption('2');
+      assert.equal(await page.locator('#skill-steps').inputValue(), '2');
     }
     await page.locator('[data-skill-use]:not([disabled])').click();
     await page.waitForFunction(() => document.querySelector('#skill-button').classList.contains('skill-spent') || document.querySelector('[data-skill-choice]'));
     assert.equal(p.skill.used, true);
     if (id === 'draft') {
-      assert.equal(await page.locator('[data-skill-choice]').count(), 3);
+      assert.equal(await page.locator('[data-skill-choice]').count(), 4);
       const chosen = p.skill.choices[1].id;
       await page.locator('#skill-dialog [data-close]').click();
       assert.equal(await page.locator('[data-action="play"]').isDisabled(), true);
       await page.reload(); await page.locator('#skill-button').click();
-      assert.equal(await page.locator('[data-skill-choice]').count(), 3);
+      assert.equal(await page.locator('[data-skill-choice]').count(), 4);
       await page.screenshot({ path: 'test-results/skill-draft.png', fullPage: true, animations: 'disabled' });
       await page.locator(`[data-skill-choice="${chosen}"]`).click();
       await page.locator('#skill-dialog').waitFor({ state: 'hidden' });
       assert.ok(p.hand.some(card => card.id === chosen)); assert.equal(p.hand.length, before + 1);
     } else if (id === 'peek') {
-      assert.equal(await page.locator('.skill-inspection .playing-card').count(), 3);
+      assert.equal(await page.locator('.skill-inspection .playing-card').count(), 5);
       await page.screenshot({ path: 'test-results/skill-peek-private.png', animations: 'disabled' });
       await page.locator('#skill-dialog [data-close]').click();
       await page.reload(); await page.locator('#skill-button:not([disabled])').waitFor(); await page.locator('#skill-button').click();
-      assert.equal(await page.locator('.skill-inspection .playing-card').count(), 3);
+      assert.equal(await page.locator('.skill-inspection .playing-card').count(), 5);
       await page.locator('#skill-dialog [data-close]').click();
       assert.equal(await other.locator('.skill-inspection').count(), 0);
     } else if (id === 'wild') {
@@ -100,23 +101,23 @@ try {
       assert.equal(room.lastPlay.cards[0].rank, 17);
     } else {
       await page.locator('#skill-dialog').waitFor({ state: 'hidden' });
-      assert.equal(p.hand.length, before + ({ gift: -1, reroll: 0, clone: 1, draw: 3, remove: -1, upgrade: 0 }[id]));
+      assert.equal(p.hand.length, before + ({ gift: -2, reroll: 0, clone: 2, draw: 4, remove: -1, upgrade: 0 }[id]));
       if (id === 'upgrade') {
         assert.equal(p.hand.filter(card => card.rank === 17).length, 2);
         assert.equal(await page.locator('#hand [aria-label="大王"]').count(), 2);
       }
     }
     if (id === 'draw') {
-      assert.equal(await page.locator('#hand [data-card]').count(), 25);
+      assert.equal(await page.locator('#hand [data-card]').count(), 28);
       for (const viewport of [{ width: 320, height: 812 }, { width: 375, height: 667 }, { width: 414, height: 896 }, { width: 768, height: 900 }, { width: 1280, height: 800 }, { width: 1366, height: 768 }]) {
         await page.setViewportSize(viewport); await page.waitForTimeout(160);
         const dimensions = await page.evaluate(() => ({ w: document.documentElement.scrollWidth, h: document.documentElement.scrollHeight }));
-        assert.ok(dimensions.w <= viewport.width && dimensions.h <= viewport.height, `25 cards fit ${viewport.width}x${viewport.height}: ${JSON.stringify(dimensions)}`);
+        assert.ok(dimensions.w <= viewport.width && dimensions.h <= viewport.height, `28 cards fit ${viewport.width}x${viewport.height}: ${JSON.stringify(dimensions)}`);
         const clipped = await page.locator('#hand [data-card]').evaluateAll(cards => cards.filter(card => {
           const parent = card.closest('#hand').getBoundingClientRect(), box = card.getBoundingClientRect();
           return box.bottom > parent.bottom || box.left < parent.left || box.right > parent.right;
         }).length);
-        assert.equal(clipped, 0, 'all 25 cards fit the hand area');
+        assert.equal(clipped, 0, 'all 28 cards fit the hand area');
         assert.ok(await page.locator('#skill-dock').evaluate(dock => {
           const box = dock.getBoundingClientRect(), hand = document.querySelector('#hand').getBoundingClientRect();
           const player = document.querySelector('#my-player').getBoundingClientRect();
@@ -124,7 +125,7 @@ try {
           const description = document.querySelector('#skill-summary').getBoundingClientRect();
           return box.left < innerWidth / 3 && box.right <= player.left && box.top >= hand.bottom && description.bottom <= innerHeight && button.height >= 44;
         }), 'lower-left skill dock and description fit without overlapping the hand or avatar');
-        if (viewport.width === 375) await page.screenshot({ path: 'test-results/skills-25-mobile.png', fullPage: true });
+        if (viewport.width === 375) await page.screenshot({ path: 'test-results/skills-28-mobile.png', fullPage: true });
       }
       await page.setViewportSize({ width: 375, height: 667 });
     }

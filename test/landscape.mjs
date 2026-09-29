@@ -54,7 +54,7 @@ try {
       });
       await page.screenshot({ path: `test-results/landscape-${mode}-${width}-${height}.png`, fullPage: true });
       assert.ok(geometry.width <= width && geometry.height <= height && geometry.controls && geometry.hand && geometry.skill && geometry.seats, `${mode} ${width}x${height}: ${JSON.stringify(geometry)}`);
-      assert.equal(geometry.rows, mode === 'fourSkills' ? 2 : 1); assert.equal(geometry.clipped, 0, `${mode} ${width}x${height}: clipped play cards`);
+      assert.equal(geometry.rows, ['skills', 'fourSkills'].includes(mode) ? 2 : 1); assert.equal(geometry.clipped, 0, `${mode} ${width}x${height}: clipped play cards`);
       assert.deepEqual(geometry.buttons, [], `${mode} ${width}x${height}: button text clipped`);
     }
     // A rotation must retain selected cards and keep the same room.

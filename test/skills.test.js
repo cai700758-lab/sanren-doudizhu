@@ -43,31 +43,31 @@ for (const id of SKILL_IDS) test(`skill ${id}: one use, turn unchanged, correct 
   const p = room.players[room.turn], client = players.find(item => item.id === p.id), other = room.players.find(item => item !== p);
   p.skill = { id, used: false, choices: null };
   const before = p.hand.map(card => ({ ...card })), otherCount = other.hand.length, deadline = room.deadline;
-  await ok(client, 'skill', { cardId: (id === 'upgrade' ? before.find(canUpgrade) : before[0]).id, targetId: other.id });
+  await ok(client, 'skill', { cardId: (id === 'upgrade' ? before.find(canUpgrade) : before[0]).id, cardIds: before.slice(0, 2).map(card => card.id), targetId: other.id });
   await until(() => players.every(peer => peer.state.skillEvent?.skillId === id));
   for (const peer of players) {
-    assert.deepEqual(peer.state.skillEvent, { sequence: 1, playerId: p.id, skillId: id, stage: 'use', ...(['gift', 'peek'].includes(id) ? { targetId: other.id } : {}) });
+    assert.deepEqual(peer.state.skillEvent, { sequence: 1, playerId: p.id, skillId: id, stage: 'use', ...(['gift', 'peek'].includes(id) ? { targetId: other.id } : {}), ...(['gift', 'reroll', 'remove'].includes(id) ? { count: 2 } : {}), ...(id === 'upgrade' ? { steps: 1 } : {}) });
     assert.deepEqual(peer.state.skillEvents, [peer.state.skillEvent], 'all seats receive the same public event without card faces');
   }
   assert.equal(p.skill.used, true); assert.equal(room.players[room.turn], p); assert.equal(room.deadline, deadline);
   if (id !== 'gift') assert.equal(room.log.at(-1).includes('交给'), false);
   assert.equal((await action(client, 'skill', { cardId: p.hand[0].id, targetId: other.id })).ok, false);
-  const countDelta = { wild: 0, gift: -1, reroll: 0, remove: -1, clone: 1, draw: 3, draft: 0, peek: 0, upgrade: 0 }[id];
+  const countDelta = { wild: 0, gift: -2, reroll: 0, remove: -2, clone: 2, draw: 4, draft: 0, peek: 0, upgrade: 0 }[id];
   assert.equal(p.hand.length, before.length + countDelta);
   assert.equal(new Set(p.hand.map(card => card.id)).size, p.hand.length);
-  if (id === 'gift') { assert.equal(other.hand.length, otherCount + 1); assert.ok(other.hand.some(card => card.id === before[0].id)); }
-  if (id === 'wild') assert.equal(p.hand.find(card => card.id === before[0].id).wild, true);
-  if (id === 'remove') assert.equal(p.hand.some(card => card.id === [...before].sort((a, b) => a.rank - b.rank || a.id - b.id)[0].id), false);
-  if (id === 'reroll') assert.equal(p.hand.some(card => card.id === before[0].id), false);
+  if (id === 'gift') { assert.equal(other.hand.length, otherCount + 2); assert.equal(before.filter(card => other.hand.some(item => item.id === card.id)).length, 2); }
+  if (id === 'wild') assert.equal(p.hand.filter(card => card.wild).length, 1);
+  if (id === 'remove') for (const card of [...before].sort((a, b) => a.rank - b.rank || a.id - b.id).slice(0, 2)) assert.equal(p.hand.some(item => item.id === card.id), false);
+  if (id === 'reroll') for (const card of before.slice(0, 2)) assert.equal(p.hand.some(item => item.id === card.id), false);
   if (id === 'peek') {
-    assert.equal(client.state.players.find(item => item.id === p.id).skill.inspection.cards.length, 3);
+    assert.equal(client.state.players.find(item => item.id === p.id).skill.inspection.cards.length, 5);
     for (const peer of players.filter(item => item !== client)) assert.equal(peer.state.players.find(item => item.id === p.id).skill.inspection, undefined);
     assert.equal(other.hand.length, otherCount);
   }
   if (id === 'draft') {
     await until(() => players.every(item => item.state.revision === client.state.revision));
     const choices = p.skill.choices;
-    assert.equal(choices.length, 3);
+    assert.equal(choices.length, 4);
     for (const peer of players.filter(item => item !== client)) assert.equal(peer.state.players.find(item => item.id === p.id).skill.choices, undefined);
     assert.equal((await action(client, 'play', { cards: [p.hand[0].id] })).ok, false);
     assert.equal((await action(client, 'skill-choice', { cardId: -1 })).ok, false);
@@ -99,13 +99,35 @@ test('upgrade crosses A, 2 and joker boundaries without wrapping or consuming in
   }
 });
 
+test('two-card reroll rejects duplicate picks and two-step upgrade stops at big joker', () => {
+  const deck = makeDeck();
+  const player = { hand: deck.slice(0, 3), skill: { id: 'reroll', used: false } };
+  const room = { mode: 'skills', phase: 'playing', turn: 0, players: [player], nextCardId: 54 };
+  assert.throws(() => applySkill(room, player, { cardIds: [0, 0] }, () => 0));
+  assert.equal(player.skill.used, false);
+  applySkill(room, player, { cardIds: [0, 1] }, () => 0);
+  assert.deepEqual(new Set(player.hand.map(card => card.id)), new Set([2, 54, 55]));
+
+  for (const rank of [15, 16]) {
+    const card = { id: 80, rank, suit: rank === 16 ? '★' : '♠' };
+    const actor = { hand: [card], skill: { id: 'upgrade', used: false } };
+    const table = { mode: 'skills', phase: 'playing', turn: 0, players: [actor] };
+    if (rank === 16) {
+      assert.throws(() => applySkill(table, actor, { cardId: 80, steps: 2 }, () => 0));
+      assert.equal(actor.skill.used, false);
+      applySkill(table, actor, { cardId: 80, steps: 1 }, () => 0);
+    } else applySkill(table, actor, { cardId: 80, steps: 2 }, () => 0);
+    assert.equal(actor.hand[0].rank, 17);
+  }
+});
+
 test('peek samples without replacement, shows short hands and stores an immutable private snapshot', async t => {
   for (const count of [1, 2, 3, 17]) {
     const p = { id: 'a', hand: [makeDeck()[50]], skill: { id: 'peek', used: false } };
     const target = { id: 'b', name: '朋友', hand: makeDeck().slice(0, count) };
     applySkill({ mode: 'skills', phase: 'playing', turn: 0, players: [p, target] }, p, { targetId: 'b' }, () => 0);
-    assert.equal(p.skill.inspection.cards.length, Math.min(3, count));
-    assert.equal(new Set(p.skill.inspection.cards.map(card => card.id)).size, Math.min(3, count));
+    assert.equal(p.skill.inspection.cards.length, Math.min(5, count));
+    assert.equal(new Set(p.skill.inspection.cards.map(card => card.id)).size, Math.min(5, count));
     const rank = p.skill.inspection.cards.find(card => card.id === target.hand[0].id).rank;
     target.hand[0].rank = 17;
     assert.equal(p.skill.inspection.cards.find(card => card.id === target.hand[0].id).rank, rank);
@@ -131,7 +153,7 @@ test('skills reject classic mode, wrong turns, forged targets and stale requests
   p.skill = { id: 'gift', used: false };
   const other = players.find(item => item !== client);
   assert.equal((await action(other, 'skill')).ok, false);
-  assert.equal((await action(client, 'skill', { cardId: -1, targetId: other.id })).ok, false);
+  assert.equal((await action(client, 'skill', { targetId: 'forged' })).ok, false);
   assert.equal((await action(client, 'skill', { cardId: p.hand[0].id, targetId: p.id })).ok, false);
   assert.equal((await action(client, 'skill', { revision: -1, cardId: p.hand[0].id, targetId: other.id })).code, 'STALE_STATE');
   assert.equal(p.skill.used, false);
@@ -142,9 +164,11 @@ test('wildcard can represent a big joker and complete a rocket, but cannot forge
   const p = room.players[room.turn], client = players.find(item => item.id === p.id);
   p.hand = makeDeck().filter(card => card.id === 0 || card.rank >= 16); p.skill = { id: 'wild', used: false };
   await ok(client, 'skill');
-  assert.equal((await action(client, 'play', { cards: [0], wildRanks: { 0: 17 } })).ok, false);
-  assert.equal((await action(client, 'play', { cards: [52, 53], wildRanks: { 53: 18 } })).ok, false);
-  await ok(client, 'play', { cards: [52, 53], wildRanks: { 53: 17 } });
+  const wildcard = p.hand.find(card => card.wild), joker = p.hand.find(card => !card.wild && card.rank >= 16);
+  const forged = p.hand.find(card => !card.wild).id;
+  assert.equal((await action(client, 'play', { cards: [forged], wildRanks: { [forged]: 17 } })).ok, false);
+  assert.equal((await action(client, 'play', { cards: [wildcard.id, joker.id], wildRanks: { [wildcard.id]: 18 } })).ok, false);
+  await ok(client, 'play', { cards: [wildcard.id, joker.id], wildRanks: { [wildcard.id]: joker.rank === 16 ? 17 : 16 } });
   assert.equal(room.lastPlay.combo.type, 'rocket'); assert.equal(p.hand.length, 1);
 });
 
@@ -175,7 +199,7 @@ test('generated cards remain unique past 20 cards and wildcard hints remain lega
   const p = { hand: makeDeck().slice(0, 22), skill: { id: 'draw', used: false } };
   const room = { mode: 'skills', phase: 'playing', turn: 0, players: [p], nextCardId: 54 };
   applySkill(room, p, {}, () => 0);
-  assert.equal(p.hand.length, 25); assert.equal(new Set(p.hand.map(card => card.id)).size, 25);
+  assert.equal(p.hand.length, 26); assert.equal(new Set(p.hand.map(card => card.id)).size, 26);
   const hand = [makeDeck()[52], { id: 60, rank: 15, suit: '✦', wild: true }];
   const hint = findSkillHint(hand, classify(makeDeck().slice(0, 4)));
   assert.equal(classify(hint).type, 'rocket');
@@ -204,7 +228,7 @@ test('a human and two bots complete a skill-mode game without stalling', { timeo
     if (host.state.turnId !== host.id) { await sleep(5); continue; }
     if (room.phase === 'bidding') { await ok(host, 'bid', { value: 3 }); continue; }
     const p = room.players.find(item => item.id === host.id);
-    if (!p.skill.used && (p.skill.id !== 'upgrade' || p.hand.some(canUpgrade))) { await ok(host, 'skill', { cardId: (p.skill.id === 'upgrade' ? p.hand.find(canUpgrade) : p.hand.at(-1)).id, targetId: room.players.find(item => item !== p).id }); if (room.phase === 'finished') break; }
+    if (!p.skill.used && (p.skill.id !== 'upgrade' || p.hand.some(canUpgrade))) { await ok(host, 'skill', { cardId: (p.skill.id === 'upgrade' ? p.hand.find(canUpgrade) : p.hand.at(-1)).id, cardIds: p.hand.slice(0, 2).map(card => card.id), targetId: room.players.find(item => item !== p).id }); if (room.phase === 'finished') break; }
     if (p.skill.choices) await ok(host, 'skill-choice', { cardId: p.skill.choices[0].id });
     const hint = findSkillHint(p.hand, room.lastPlay?.combo);
     if (hint) await ok(host, 'play', { cards: hint.map(card => card.id), wildRanks: Object.fromEntries(hint.filter(card => card.wild).map(card => [card.id, card.rank])) });

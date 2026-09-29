@@ -8,15 +8,15 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&a
 export function skillOutcome(event, players) {
   const target = players.find(player => player.id === event.targetId)?.name || '另一位玩家';
   return {
-    wild: '最大手牌已变为万能牌 · 可替代大小王',
-    gift: `已交给 ${target} 一张牌 · 自己 −1 / 对方 +1`,
-    reroll: '一张手牌已随机替换 · 张数不变',
-    remove: '最小手牌已移除 · 手牌 −1',
-    clone: '已随机复制一张手牌 · 手牌 +1',
-    draw: '已获得三张随机牌 · 手牌 +3',
-    draft: event.stage === 'choice' ? '已选取一张牌加入手牌 · 手牌 +1' : '正在三张随机牌中选择 · 候选牌仅本人可见',
+    wild: '随机手牌已变为万能牌 · 可替代大小王',
+    gift: `已交给 ${target} ${event.count || 2} 张牌 · 自己 −${event.count || 2} / 对方 +${event.count || 2}`,
+    reroll: `${event.count || 2} 张手牌已随机替换 · 张数不变`,
+    remove: `最小的 ${event.count || 2} 张牌已移除 · 手牌 −${event.count || 2}`,
+    clone: '已随机复制两张手牌 · 手牌 +2',
+    draw: '已获得四张随机牌 · 手牌 +4',
+    draft: event.stage === 'choice' ? '已选取一张牌加入手牌 · 手牌 +1' : '正在四张随机牌中选择 · 候选牌仅本人可见',
     peek: `已查看 ${target} 的随机手牌 · 牌面仅使用者可见`,
-    upgrade: '一张手牌已升一级 · 张数不变',
+    upgrade: `一张手牌已升${event.steps || 1}级 · 张数不变`,
   }[event.skillId];
 }
 
@@ -97,7 +97,8 @@ export function createSkillEffects({ reducedMotion }) {
     layer.dataset.target = event.targetId || '';
     if (event.skillId === 'gift') {
       const to = seat(event.targetId);
-      fly(from, to); pulse(from, '−1', 350); pulse(to, '+1', 1700);
+      for (let i = 0; i < (event.count || 2); i++) fly(from, to, { delay: 350 + i * 250, index: i });
+      pulse(from, `−${event.count || 2}`, 350); pulse(to, `+${event.count || 2}`, 1700);
     } else if (event.skillId === 'peek') {
       const target = seat(event.targetId);
       const node = card(target, 'peek');
@@ -116,15 +117,15 @@ export function createSkillEffects({ reducedMotion }) {
         { transform: transform({ x: raised.x, y: raised.y - 25 }, 1.2), opacity: 1, offset: .65 },
         { transform: transform(from, .7), opacity: 0 },
       ], { duration: 2500, delay: 350 });
-      pulse(raised, '↑ 升一级', 1100);
+      pulse(raised, `↑ 升${event.steps || 1}级`, 1100);
     } else if (event.skillId === 'draw') {
-      for (let i = 0; i < 3; i++) fly({ x: source.x + (i - 1) * 18, y: source.y }, from, { delay: 350 + i * 230, index: i });
-      pulse(from, '+3', 2100);
+      for (let i = 0; i < 4; i++) fly({ x: source.x + (i - 1.5) * 18, y: source.y }, from, { delay: 350 + i * 180, index: i });
+      pulse(from, '+4', 2100);
     } else if (event.skillId === 'draft') {
       if (event.stage === 'choice') {
         fly(raised, from, { face: 'draft' }); pulse(from, '+1', 1700);
-      } else for (let i = 0; i < 3; i++) {
-        const node = card(source, '', i), fan = { x: from.x + (i - 1) * 42, y: from.y - 65 };
+      } else for (let i = 0; i < 4; i++) {
+        const node = card(source, '', i), fan = { x: from.x + (i - 1.5) * 42, y: from.y - 65 };
         animate(node, [
           { transform: transform(source, .5), opacity: 0 },
           { transform: transform(fan, 1, (i - 1) * 12), opacity: 1, offset: .3 },
@@ -142,24 +143,31 @@ export function createSkillEffects({ reducedMotion }) {
           { transform: transform(from, .7), opacity: 0 },
         ], { duration: 2300, delay: 350 });
       }
-      pulse(from, '+1', 2150);
+      pulse(from, '+2', 2150);
     } else if (event.skillId === 'remove') {
-      const node = card(from, 'remove');
-      animate(node, [
-        { transform: transform(from, .7), opacity: 0, filter: 'blur(0px)' },
-        { transform: transform(raised), opacity: 1, filter: 'blur(0px)', offset: .35 },
-        { transform: transform({ x: raised.x, y: raised.y - 35 }, .1, -30), opacity: 0, filter: 'blur(8px)' },
-      ], { duration: 2100, delay: 350 });
-      pulse(from, '−1', 1550);
+      for (let i = 0; i < (event.count || 2); i++) {
+        const node = card(from, 'remove', i);
+        const lifted = { x: raised.x + (i ? 22 : -22), y: raised.y };
+        animate(node, [
+          { transform: transform(from, .7), opacity: 0, filter: 'blur(0px)' },
+          { transform: transform(lifted), opacity: 1, filter: 'blur(0px)', offset: .35 },
+          { transform: transform({ x: lifted.x, y: lifted.y - 35 }, .1, -30), opacity: 0, filter: 'blur(8px)' },
+        ], { duration: 2100, delay: 350 + i * 180 });
+      }
+      pulse(from, `−${event.count || 2}`, 1550);
     } else {
       // Wildcard lights up; reroll flips out the old card and reveals a new back.
-      const node = card(from, event.skillId);
-      animate(node, [
-        { transform: `${transform(from, .7)} rotateY(0deg)`, opacity: 0 },
-        { transform: `${transform(raised, 1.15)} rotateY(0deg)`, opacity: 1, offset: .25 },
-        { transform: `${transform(raised, 1.15)} rotateY(${event.skillId === 'wild' ? 360 : 540}deg)`, opacity: 1, offset: .65 },
-        { transform: `${transform(from, .7)} rotateY(720deg)`, opacity: 0 },
-      ], { duration: 2500, delay: 350 });
+      const count = event.skillId === 'reroll' ? event.count || 2 : 1;
+      for (let i = 0; i < count; i++) {
+        const node = card(from, event.skillId, i);
+        const lifted = { x: raised.x + (i - (count - 1) / 2) * 34, y: raised.y };
+        animate(node, [
+          { transform: `${transform(from, .7)} rotateY(0deg)`, opacity: 0 },
+          { transform: `${transform(lifted, 1.15)} rotateY(0deg)`, opacity: 1, offset: .25 },
+          { transform: `${transform(lifted, 1.15)} rotateY(${event.skillId === 'wild' ? 360 : 540}deg)`, opacity: 1, offset: .65 },
+          { transform: `${transform(from, .7)} rotateY(720deg)`, opacity: 0 },
+        ], { duration: 2500, delay: 350 + i * 180 });
+      }
       pulse(raised, event.skillId === 'wild' ? '✦ 万能牌' : '↻ 换牌', 1100);
     }
   }

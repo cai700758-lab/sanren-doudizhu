@@ -77,7 +77,7 @@ const skillUI = createSkillUI({ getState: () => state, send, cardHTML, getSelect
   isBlocked: () => !connected || busy || inTransition() });
 $('#rules-dialog .rules-content').insertAdjacentHTML('afterbegin', '<h3>三人经典</h3>');
 $('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', '<h3>四人经典与四人技能</h3><p>两副牌共 108 张，每人 25 张，地主拿 8 张底牌后共 33 张。一位地主对抗三位农民，任一农民出完即为农民阵营获胜。全部准备才开局；四人都不叫则重新发牌，连续三家不出后由上一位出牌者领出。</p><p>可出单张、对子、三张、三带二、顺子、连对、飞机及飞机带对子。不能三带一、飞机带单或四带二；飞机翅膀为不同点数的对子，不能复用主体点数。两个小王或两个大王可作对子，一小王加一大王不能出。四至八张同点数为炸弹，先比张数再比点数；两小王加两大王是最大的四王炸。2 和王不能进入顺子、连对或飞机主体。</p><p>本游戏四人计分：叫分为初始倍数，每个炸弹、四王炸、春天各翻倍；地主得失三份积分，每位农民一份。八张炸弹和四王炸不会直接判胜，没有农民出炸数量限制。四人技能在上述四人规则下，每人额外获得一个技能。</p>');
-$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', `<h3>技能模式</h3><p>建房时选择技能模式。每人发牌时随机获得一个技能，可能与其他玩家相同。只能在自己的出牌回合使用，每局一次；使用后继续出牌，回合计时不重置。</p><ul>${Object.values(SKILLS).map(skill => `<li><strong>${skill.name}</strong>：${skill.description}</li>`).join('')}</ul><p>随机牌来自完整的 54 张牌，包含大小王，可以与已有牌重复。万能牌可替代大小王，仍需组成合法牌型；五张同点数不算炸弹。赠牌或弃牌清空自己的手牌时直接获胜。三选一的候选牌仅本人可见，超时会选第一张并继续托管。</p>`);
+$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', `<h3>技能模式</h3><p>建房时选择技能模式。每人发牌时随机获得一个技能，可能与其他玩家相同。只能在自己的出牌回合使用，每局一次；使用后继续出牌，回合计时不重置。</p><ul>${Object.values(SKILLS).map(skill => `<li><strong>${skill.name}</strong>：${skill.description}</li>`).join('')}</ul><p>随机牌来自完整的 54 张牌，包含大小王，可以与已有牌重复。万能牌可替代大小王，仍需组成合法牌型；炸弹按当前人数的牌型规则判定。赠牌或弃牌清空自己的手牌时直接获胜。四选一的候选牌仅本人可见，超时会选第一张并继续托管。</p>`);
 const initialCode = new URLSearchParams(location.search).get('room');
 if (/^\d{6}$/.test(initialCode || '')) $('#room-code').value = initialCode;
 $('#nickname').value = storage.get('sanren-name', true) || '';
@@ -329,7 +329,7 @@ function renderActions() {
 function renderSelection() {
   const message = $('#selection-message');
   message.classList.remove('invalid');
-  if (me().skill?.pending) { message.textContent = '请点击「选牌」完成三选一'; return; }
+  if (me().skill?.pending) { message.textContent = '请点击「选牌」完成四选一'; return; }
   if (state.phase !== 'playing' || !selected.size) {
     message.textContent = state.phase === 'playing' ? '点击或滑动选牌，再次选中取消' : state.phase === 'finished' ? `${state.result.landlordWon ? '地主' : '农民'}获胜${state.result.spring ? ' · 春天翻倍' : ''} · ${state.result.multiplier} 倍` : '';
     return;
@@ -352,16 +352,18 @@ function renderHand() {
   const compact = window.innerHeight < 1150;
   const shortPhone = mobile && window.innerHeight < 760;
   const shortDesktop = !mobile && window.innerHeight < 800;
-  const fourSkill = four && skillMode;
-  const rowGap = landscape ? (fourSkill ? 2 : 0) : shortPhone ? (fourSkill ? 2 : 4) : compact ? (mobile ? 8 : 6) : (mobile ? 20 : 12);
-  const topSpace = landscape ? (fourSkill ? 6 : 10) : shortPhone ? (fourSkill ? 4 : 8) : compact ? 12 : 24;
-  const gridRows = landscape && fourSkill ? getComputedStyle($('.arena')).gridTemplateRows.split(' ') : [];
-  const fourSkillHeight = gridRows.length === 6 ? Math.floor((parseFloat(gridRows[4]) - topSpace) / 2) - rowGap : 42;
-  const cardHeight = landscape ? fourSkill ? Math.max(24, fourSkillHeight) : Math.max(48, Math.min(88, window.innerHeight - 260)) : shortPhone ? (fourSkill ? 42 : 54) : shortDesktop ? 84 : compact ? (mobile ? 68 : 94) : (mobile ? 94 : 132);
+  const tightHand = skillMode && window.innerWidth < 1000;
+  const doubleRow = skillMode && (four || hand.length > 20);
+  container.classList.toggle('multi-row-skill', landscape && doubleRow);
+  const rowGap = landscape ? (doubleRow ? 2 : 0) : shortPhone ? (four && skillMode ? 2 : 4) : compact ? (mobile ? 8 : 6) : (mobile ? 20 : 12);
+  const topSpace = landscape ? (doubleRow ? 6 : 10) : shortPhone ? (four && skillMode ? 4 : 8) : compact ? 12 : 24;
+  const gridRows = landscape && doubleRow ? getComputedStyle($('.arena')).gridTemplateRows.split(' ') : [];
+  const doubleRowHeight = gridRows.length === 6 ? Math.floor((parseFloat(gridRows[4]) - topSpace) / 2) - rowGap : 42;
+  const cardHeight = landscape ? doubleRow ? Math.max(24, doubleRowHeight) : Math.max(48, Math.min(88, window.innerHeight - 260)) : shortPhone ? (four && skillMode ? 42 : 54) : shortDesktop ? 84 : compact ? (mobile ? 68 : tightHand ? 80 : 94) : (mobile ? 94 : 132);
   const handStyle = getComputedStyle(container);
   const width = container.clientWidth - parseFloat(handStyle.paddingLeft) - parseFloat(handStyle.paddingRight) - 4;
   const minStep = mobile ? (skillMode ? 17 : 22) : (skillMode || four ? 25 : 30);
-  const rowSize = landscape ? (four && skillMode ? 20 : modeRules(state.mode).maxHand) : four && mobile ? (skillMode ? 20 : 17) : Math.max(1, Math.min(mobile ? (skillMode ? 14 : 10) : (four ? 33 : skillMode ? 25 : 20), Math.floor((width - cardWidth) / minStep) + 1));
+  const rowSize = landscape ? (doubleRow ? Math.ceil(modeRules(state.mode).maxHand / 2) : modeRules(state.mode).maxHand) : four && mobile ? (skillMode ? Math.ceil(modeRules(state.mode).maxHand / 2) : 17) : Math.max(1, Math.min(mobile ? (skillMode ? 14 : 10) : (four ? 33 : skillMode ? 28 : 20), Math.floor((width - cardWidth) / minStep) + 1));
   container.style.height = `${topSpace + Math.ceil(modeRules(state.mode).maxHand / rowSize) * (cardHeight + rowGap)}px`;
   if (!hand.length) { container.innerHTML = `<div class="hand-placeholder">${state.phase === 'finished' ? '手牌已出完' : '等待发牌'}</div>`; return; }
   const rows = [];

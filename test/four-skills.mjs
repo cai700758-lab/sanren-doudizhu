@@ -35,9 +35,9 @@ try {
   const deck = makeDeck('fourSkills');
   room.phase = 'playing'; room.turn = 0; room.landlordId = room.players[0].id;
   room.players[0].skill = { id: 'gift', used: false, choices: null };
-  room.players[0].hand = [...deck.slice(0, 33), ...deck.slice(33, 39).map((card, i) => ({ ...card, id: 108 + i }))];
+  room.players[0].hand = [...deck.slice(0, 33), ...deck.slice(33, 43).map((card, i) => ({ ...card, id: 108 + i }))];
   await page.reload(); await page.locator('#hand .playing-card').first().waitFor();
-  assert.equal(await page.locator('#hand .playing-card').count(), 39);
+  assert.equal(await page.locator('#hand .playing-card').count(), 43);
   assert.equal(await page.locator('#top-player .role-bot').count(), 1);
   assert.equal(await page.locator('#hand .hand-row').count(), 2);
   for (const [width, height] of [[320, 667], [375, 667], [414, 896], [568, 320], [844, 390]]) {
@@ -56,10 +56,10 @@ try {
   assert.equal(await page.locator('#skill-target option').count(), 3);
   const recipient = room.players[2]; await page.locator('#skill-target').selectOption(recipient.id);
   const before = recipient.hand.length; await page.locator('[data-skill-use]').click();
-  assert.equal(recipient.hand.length, before + 1);
+  assert.equal(recipient.hand.length, before + 2);
   assert.equal(room.players[0].skill.used, true);
   assert.equal(await page.locator('.skill-announcement').isVisible(), true);
   assert.equal(await page.locator('.skill-motion-layer').getAttribute('data-target'), recipient.id);
   assert.deepEqual(errors, []);
-  console.log('Four-player skills UI: simplified lobby, mode setup, 39 cards, five portrait/landscape viewports, target choice and skill animation passed.');
+  console.log('Four-player skills UI: simplified lobby, mode setup, 43 cards, five portrait/landscape viewports, target choice and skill animation passed.');
 } finally { await browser.close(); await game.close(); }

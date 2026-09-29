@@ -62,7 +62,7 @@ for (const mode of ['classic', 'skills', 'four', 'fourSkills']) {
       const self = actor.state.players.find(p => p.id === actor.id);
       const card = self.skill.id === 'upgrade' ? self.hand.find(canUpgrade) : self.hand[0];
       if (card) {
-        await send(actor, 'skill', { cardId: card.id, targetId: actor.state.players.find(p => p.id !== actor.id).id });
+        await send(actor, 'skill', { cardId: card.id, cardIds: self.hand.slice(0, 2).map(item => item.id), targetId: actor.state.players.find(p => p.id !== actor.id).id });
         await settle(players);
         const updated = actor.state.players.find(p => p.id === actor.id);
         assert.equal(updated.skill.used, true);

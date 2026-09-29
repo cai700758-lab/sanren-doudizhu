@@ -87,10 +87,11 @@ try {
     p.skill = { id: 'wild', used: false }; await actor.reload();
     await actor.locator('#skill-button:not([disabled])').waitFor(); await use(actor);
     await actor.locator('#skill-dialog [data-close]').click();
-    assert.ok(await actor.locator('.skill-announcement').evaluate(node => {
+    const noticeLayout = await actor.locator('.skill-announcement').evaluate(node => {
       const box = node.getBoundingClientRect();
-      return box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight && node.scrollWidth <= node.clientWidth && document.documentElement.scrollHeight <= innerHeight;
-    }));
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: innerWidth, height: innerHeight, contentWidth: node.scrollWidth, clientWidth: node.clientWidth, scrollHeight: document.documentElement.scrollHeight };
+    });
+    assert.ok(noticeLayout.left >= 0 && noticeLayout.right <= noticeLayout.width && noticeLayout.top >= 0 && noticeLayout.bottom <= noticeLayout.height && noticeLayout.contentWidth <= noticeLayout.clientWidth && noticeLayout.scrollHeight <= noticeLayout.height, `${viewport.width}x${viewport.height}: ${JSON.stringify(noticeLayout)}`);
     if (viewport.width === 375) await actor.screenshot({ path: 'test-results/skill-notice-mobile.png' });
   }
   await actor.emulateMedia({ reducedMotion: 'reduce' });
