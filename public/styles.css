@@ -1134,9 +1134,28 @@ body:not(.in-game) .site-header .connection { display: none; }
 .choice-grid input:disabled + span { opacity: .45; cursor: not-allowed; }
 .choice-grid label:hover span { border-color: var(--color-accent-edge); }
 .choice-grid .race-choice { grid-column: 1 / -1; }
-.race-progress { display: inline-flex; align-items: center; flex-shrink: 0; color: var(--color-table-gold); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.race-mode .avatar-progress { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; }
+.race-mode .player-slot.right .avatar-progress { flex-direction: row-reverse; }
+.race-mode .race-progress { display: inline-flex; align-items: baseline; justify-content: center; gap: 1px; min-width: 64px; padding: 5px 7px; border: 1px solid #fff0af; border-radius: 11px; background: var(--color-table-gold); color: var(--color-table-room); box-shadow: 0 3px 0 var(--color-table-shadow); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.race-mode .race-progress strong { font: 900 22px/1 var(--font-display); }
+.race-mode .race-progress small { font: 800 11px/1 var(--font-display); color: inherit; }
+.race-mode .my-footer .player-info { gap: 9px; }
+.race-draw-card { position: absolute; z-index: 1; margin: 0; border-radius: 7px; box-shadow: 0 8px 15px #052d2699; }
 .race-mode .bottom-area { color: var(--color-table-gold); font-weight: 800; }
 .race-mode .draw-count { display: inline-block; margin-top: 4px; font-size: 15px; font-variant-numeric: tabular-nums; }
+@media (width < 600px), (height < 550px) {
+  .race-mode .avatar-progress { gap: 4px; }
+  .race-mode .race-progress { min-width: 46px; padding: 4px 5px; border-radius: 8px; }
+  .race-mode .race-progress strong { font-size: 16px; }
+  .race-mode .race-progress small { font-size: 9px; }
+}
+@media (width <= 375px) {
+  .in-game.race-mode .player-slot .player-info { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .in-game.race-mode .player-slot.right .player-info { flex-direction: column; align-items: flex-end; }
+  .in-game.race-mode .player-slot .player-role { margin-top: 1px; }
+  .in-game.race-mode .player-slot .opponent-hand { margin-top: 2px; }
+  .in-game.race-mode .player-slot .seat-status { display: none; }
+}
 #join-options > label { display: block; margin: 0 0 8px; font-size: 13px; font-weight: 750; }
 #create-options .form-error, #join-options .form-error { min-height: 18px; padding: 0; margin: 0 0 8px; }
 @media (width < 600px) and (height < 760px) {

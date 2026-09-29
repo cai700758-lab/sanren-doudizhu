@@ -231,13 +231,17 @@ function characterHTML(p) {
 function avatarHTML(p) {
   return `<span class="avatar character-avatar${p.id === state.landlordId ? ' landlord' : ''}${active() && p.id === state.turnId ? ' current' : ''}" aria-hidden="true">${characterHTML(p)}</span>`;
 }
+function portraitHTML(p) {
+  if (!isRaceMode(state.mode)) return avatarHTML(p);
+  return `<span class="avatar-progress">${avatarHTML(p)}<span class="race-progress" aria-label="${escape(p.name)}已打出${p.playedCount}张，目标30张"><strong>${p.playedCount}</strong><small>/30</small></span></span>`;
+}
 function opponentHandHTML(p) {
   if (!active() || !p.count) return '<div class="opponent-hand" aria-hidden="true"></div>';
   return `<div class="opponent-hand" role="img" aria-label="${escape(p.name)}剩余 ${p.count} 张手牌">${'<span class="facedown-card" aria-hidden="true"></span>'.repeat(p.count)}</div>`;
 }
 function playerHTML(p, mine = false) {
   if (!p) return '<div class="empty-seat"><div class="avatar">+</div><span>等待加入</span></div>';
-  return `<div class="player-info">${avatarHTML(p)}<div><div class="player-name" title="${escape(p.name)}">${escape(p.name)}${mine ? ' · 你' : ''}</div><div class="player-role" aria-label="${role(p)}${!p.connected ? ' · 离线' : ''}">${roleHTML(p)}${!p.connected ? '<span class="role-offline">离线</span>' : ''}</div></div></div>${!mine ? `${opponentHandHTML(p)}<div class="seat-status"><span class="player-status">${!active() ? (p.ready ? '已准备 ✓' : '未准备') : escape(p.lastAction)}</span>${active() || state.phase === 'finished' ? isRaceMode(state.mode) ? `<span class="race-progress" aria-label="已打出${p.playedCount}张，目标30张">${p.playedCount}/30</span>` : `<span class="player-count${p.count <= 2 ? ' danger' : ''}"><strong>${p.count}</strong>张</span>` : ''}</div>` : ''}${p.bot && !active() && state.hostId === state.me ? `<button class="text-button bot-remove" data-action="remove-bot" data-bot-id="${escape(p.id)}" aria-label="移除机器人${escape(p.name)}">移除</button>` : ''}`;
+  return `<div class="player-info" data-player-id="${p.id}">${portraitHTML(p)}<div><div class="player-name" title="${escape(p.name)}">${escape(p.name)}${mine ? ' · 你' : ''}</div><div class="player-role" aria-label="${role(p)}${!p.connected ? ' · 离线' : ''}">${roleHTML(p)}${!p.connected ? '<span class="role-offline">离线</span>' : ''}</div></div></div>${!mine ? `${opponentHandHTML(p)}<div class="seat-status"><span class="player-status">${!active() ? (p.ready ? '已准备 ✓' : '未准备') : escape(p.lastAction)}</span>${active() || state.phase === 'finished' ? isRaceMode(state.mode) ? '' : `<span class="player-count${p.count <= 2 ? ' danger' : ''}"><strong>${p.count}</strong>张</span>` : ''}</div>` : ''}${p.bot && !active() && state.hostId === state.me ? `<button class="text-button bot-remove" data-action="remove-bot" data-bot-id="${escape(p.id)}" aria-label="移除机器人${escape(p.name)}">移除</button>` : ''}`;
 }
 function render() {
   $('#lobby').hidden = Boolean(state); $('#game').hidden = !state;
@@ -632,6 +636,61 @@ function flyToCard(node, source, delay = 0, duration = 700) {
     if (animation) animation.finished.then(cleanup, cleanup); else cleanup();
   }
 }
+function animateRaceDraw(previous, next, origins) {
+  if (!isRaceMode(next.mode)) return;
+  const actor = next.players.find(player => player.playedCount > (previous.players.find(old => old.id === player.id)?.playedCount || 0));
+  if (!actor) return;
+  const oldCount = previous.players.find(player => player.id === actor.id)?.playedCount || 0;
+  const count = actor.playedCount - oldCount;
+  const layer = $('#animation-layer'), layerBox = layer.getBoundingClientRect();
+  const source = { x: origins.bottom.left + origins.bottom.width / 2, y: origins.bottom.top + origins.bottom.height / 2 };
+  const flyBack = (target, index, reveal) => {
+    const back = document.createElement('span');
+    back.className = 'playing-card back race-draw-card';
+    Object.assign(back.style, { left: `${target.x - target.width / 2 - layerBox.left}px`, top: `${target.y - target.height / 2 - layerBox.top}px`, width: `${target.width}px`, height: `${target.height}px` });
+    layer.append(back);
+    const dx = source.x - target.x, dy = source.y - target.y;
+    const motion = moveCard(back, [
+      { opacity: 0, transform: `translate(${dx}px, ${dy}px) scale(.55) rotate(-12deg)` },
+      { opacity: 1, transform: `translate(${dx * .55}px, ${dy * .55 - 25}px) scale(.85) rotate(-5deg)`, offset: .4 },
+      { opacity: 1, transform: 'translate(0, 0) scale(1.06)', offset: .84 },
+      { opacity: 0, transform: 'translate(0, 0) scale(1)' },
+    ], { duration: 760, delay: Math.min(index, 10) * 55, fill: 'backwards' });
+    const done = () => { back.remove(); reveal?.(); };
+    if (motion) motion.finished.then(done, done); else done();
+  };
+  if (actor.id === next.me) {
+    const oldIds = new Set(previous.players.find(player => player.id === next.me).hand.map(card => card.id));
+    const playedIds = new Set(next.tablePlays?.[next.me]?.cards.map(card => card.id) || []);
+    const hand = [...$('#hand').querySelectorAll('[data-card-id]')];
+    const drawn = hand.filter(node => !oldIds.has(Number(node.dataset.cardId)) || playedIds.has(Number(node.dataset.cardId)));
+    const drawnIds = new Set(drawn.map(node => Number(node.dataset.cardId)));
+    for (const node of hand) {
+      const id = Number(node.dataset.cardId), old = origins.hand.get(id);
+      if (!old || drawnIds.has(id)) continue;
+      const target = node.getBoundingClientRect(), dx = old.left - target.left, dy = old.top - target.top;
+      if (Math.abs(dx) + Math.abs(dy) > 2) moveCard(node, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }], { duration: 540, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    }
+    drawn.forEach((node, index) => {
+      const rect = node.getBoundingClientRect();
+      node.style.visibility = 'hidden';
+      flyBack({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, width: rect.width, height: rect.height }, index, () => {
+        if (!node.isConnected) return;
+        node.style.visibility = '';
+        moveCard(node, [{ opacity: .4, transform: 'translateY(-10px) scaleX(.7)' }, { opacity: 1, transform: 'translateY(0) scaleX(1)' }], { duration: 260 });
+      });
+    });
+  } else {
+    const seat = [...document.querySelectorAll('.player-info')].find(node => node.dataset.playerId === actor.id)?.closest('.player-slot');
+    const pile = seat?.querySelector('.opponent-hand');
+    if (pile) {
+      const rect = pile.getBoundingClientRect();
+      for (let index = 0; index < count; index++) flyBack({ x: rect.left + rect.width * (.42 + Math.min(index, 8) * .025), y: rect.top + rect.height / 2, width: Math.min(32, rect.height * .75), height: Math.min(44, rect.height) }, index);
+    }
+  }
+  const counter = [...document.querySelectorAll('.player-info')].find(node => node.dataset.playerId === actor.id)?.querySelector('.race-progress');
+  moveCard(counter, [{ transform: 'scale(1)', filter: 'brightness(1)' }, { transform: 'scale(1.22)', filter: 'brightness(1.25)', offset: .45 }, { transform: 'scale(1)', filter: 'brightness(1)' }], { duration: 760 });
+}
 function animateTableUpdate(previous, next, origins) {
   if (!previous || !next || previous.code !== next.code || reducedMotion.matches || document.visibilityState !== 'visible') return;
   if (next.dealId !== previous.dealId && ['bidding', 'playing'].includes(next.phase)) {
@@ -669,11 +728,7 @@ function animateTableUpdate(previous, next, origins) {
       flyToCard(card, source, i * 12, ['bomb', 'rocket', 'superBomb'].includes(play.combo.type) ? 650 : 420);
     });
   }
-  if (isRaceMode(next.mode) && next.me === previous.turnId && next.players.find(p => p.id === next.me).playedCount > previous.players.find(p => p.id === next.me).playedCount) {
-    $('#hand').querySelectorAll('[data-card-id]').forEach(card => {
-      if (!origins.hand.has(Number(card.dataset.cardId))) flyToCard(card, origins.bottom, 250, 600);
-    });
-  }
+  animateRaceDraw(previous, next, origins);
   for (const zone of document.querySelectorAll('.player-play.has-pass')) {
     const id = zone.dataset.playerId;
     if (previous.tablePasses?.[id]?.sequence === next.tablePasses[id].sequence) continue;
