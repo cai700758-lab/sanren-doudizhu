@@ -53,7 +53,7 @@ try {
   await page.waitForTimeout(750); assert.deepEqual(await selectedRanks(), [], 'clear cancels pending repair');
 
   await page.setViewportSize({ width: 375, height: 667 });
-  const plane = await seed([3, 3, 3, 4, 4, 4, 5]);
+  const plane = await seed([3, 3, 3, 4, 4, 4, 5, 6, 7]);
   const first = await page.locator(`#hand [data-card="${plane[0].id}"]`).boundingBox();
   const last = await page.locator(`#hand [data-card="${plane.at(-1).id}"]`).boundingBox();
   const cdp = await page.context().newCDPSession(page);
@@ -61,14 +61,14 @@ try {
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: last.x + 8, y: last.y + 25 }] });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await cdp.detach();
   await page.locator('[data-action="undo-selection"]').waitFor();
-  assert.deepEqual(await selectedRanks(), [3, 3, 3, 4, 4, 4]);
-  assert.ok((await page.locator('#selection-message').textContent()).includes('飞机'));
+  assert.deepEqual(await selectedRanks(), [3, 3, 3, 4, 4, 4, 5, 6]);
+  assert.ok((await page.locator('#selection-message').textContent()).includes('飞机带单'));
   assert.ok(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight));
   assert.ok(await page.locator('#selection-message').evaluate(node => node.scrollWidth <= node.clientWidth), 'repair notice and undo fit on mobile');
   await fs.mkdir('test-results', { recursive: true });
   await page.screenshot({ path: 'test-results/smart-selection-mobile.png', fullPage: true });
   await page.locator('[data-action="undo-selection"]').click();
-  assert.deepEqual(await selectedRanks(), [3, 3, 3, 4, 4, 4, 5], 'undo also works on mobile');
+  assert.deepEqual(await selectedRanks(), [3, 3, 3, 4, 4, 4, 5, 6, 7], 'undo also works on mobile');
   const pairs = await seed([3, 3, 8, 8, 12], makeDeck().filter(card => card.rank === 6).slice(0, 2));
   await keyboardSelect(pairs); await page.locator('[data-action="undo-selection"]').waitFor();
   assert.deepEqual(await selectedRanks(), [8, 8]);

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeDeck, classify, beats, findClosestSelection } from '../lib/game.js';
+import { makeDeck, classify, beats, findClosestSelection, pendingAirplaneWings } from '../lib/game.js';
 
 function cards(ranks) {
   const deck = makeDeck();
@@ -19,6 +19,15 @@ test('selection repair retains the largest straight, pair chain and airplane var
     assert.equal(result.length, size); assert.equal(classify(result).type, type);
     assert.ok(result.every(card => selected.some(original => original.id === card.id)));
   }
+});
+test('partial wings on a three-chain airplane stay selected until the combination is complete', () => {
+  const body = cards([3, 3, 3, 4, 4, 4, 5, 5, 5]);
+  const wings = cards([6, 7, 8]);
+  assert.deepEqual(pendingAirplaneWings([...body, wings[0]], 'race'), { type: 'airplaneSingle', missing: 2 });
+  assert.deepEqual(pendingAirplaneWings([...body, ...wings.slice(0, 2)], 'race'), { type: 'airplaneSingle', missing: 1 });
+  assert.equal(classify([...body, ...wings], 'race').type, 'airplaneSingle');
+  assert.equal(pendingAirplaneWings([...body, ...wings], 'race'), null);
+  assert.equal(classify([...body, ...wings], 'four'), null);
 });
 test('repair follows the current trick and never silently adds cards', () => {
   const pair = findClosestSelection(cards([3, 3, 8, 8, 12]), classify(cards([6, 6])));

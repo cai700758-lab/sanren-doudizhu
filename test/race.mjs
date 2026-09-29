@@ -101,6 +101,30 @@ try {
     assert.ok(geometry.width <= geometry.viewportWidth && geometry.height <= geometry.viewportHeight, `19-card hand: ${JSON.stringify(geometry)}`);
     await passerPage.screenshot({ path: viewport.width === 320 ? 'test-results/race-pass-mobile.png' : 'test-results/race-pass-landscape.png', animations: 'disabled' });
   }
+  const allCards = [...room.players.flatMap(player => player.hand), ...room.drawPile, ...room.discardPile];
+  const airplane = [3, 4, 5].flatMap(rank => allCards.filter(card => card.rank === rank).slice(0, 3));
+  const wings = [6, 7, 8].map(rank => allCards.find(card => card.rank === rank));
+  const moved = new Set([...airplane, ...wings].map(card => card.id));
+  for (const player of room.players) player.hand = player.hand.filter(card => !moved.has(card.id));
+  room.drawPile = room.drawPile.filter(card => !moved.has(card.id));
+  room.discardPile = room.discardPile.filter(card => !moved.has(card.id));
+  owner.hand.push(...airplane, ...wings);
+  clearTimeout(room.timer); room.turn = lead; room.lastPlay = null; room.actionAt = 0;
+  room.tablePlays = {}; room.tablePasses = {};
+  await page.reload(); await page.locator('[data-action="hint"]:not([disabled])').waitFor();
+  for (const card of airplane) {
+    await page.locator(`#hand [data-card="${card.id}"]`).focus(); await page.keyboard.press('Space');
+  }
+  for (const [index, card] of wings.entries()) {
+    await page.locator(`#hand [data-card="${card.id}"]`).focus(); await page.keyboard.press('Space');
+    await page.waitForTimeout(750);
+    assert.equal(await page.locator(`#hand [data-card="${card.id}"]`).getAttribute('aria-pressed'), 'true', `wing ${index + 1} remains selected`);
+  }
+  assert.equal(await page.locator('#hand [aria-pressed="true"]').count(), 12);
+  assert.ok((await page.locator('#selection-message').textContent()).includes('飞机带单'));
+  await page.locator('[data-action="play"]:not([disabled])').click();
+  assert.equal(room.tablePlays[owner.id].combo.type, 'airplaneSingle');
+  assert.equal(room.tablePlays[owner.id].combo.chain, 3);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   clearTimeout(room.timer); room.turn = lead; room.lastPlay = null; room.actionAt = 0; owner.playedCount = 47;
   await page.reload(); await page.locator('[data-action="hint"]:not([disabled])').waitFor();

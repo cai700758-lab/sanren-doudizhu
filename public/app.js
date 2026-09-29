@@ -1,4 +1,4 @@
-import { classify as classifyCards, beats, findHint as hintCards, findClosestSelection as closestCards, rankLabel, MODES, modeRules, isFourMode, isSkillMode, isRaceMode, RACE_TARGET } from '/game.js';
+import { classify as classifyCards, beats, findHint as hintCards, findClosestSelection as closestCards, pendingAirplaneWings, rankLabel, MODES, modeRules, isFourMode, isSkillMode, isRaceMode, RACE_TARGET } from '/game.js';
 import { tableCues } from './table-cues.js';
 import { createTableSound } from './sound.js';
 import { comboEffect, comboArtwork } from './combo-effects.js';
@@ -354,7 +354,11 @@ function renderSelection() {
     return;
   }
   const combo = classify(effectiveHand().filter(c => selected.has(c.id)));
-  if (!combo) { message.textContent = `已选 ${selected.size} 张 · 暂未组成有效牌型`; message.classList.add('invalid'); }
+  if (!combo) {
+    const pending = pendingAirplaneWings(effectiveHand().filter(c => selected.has(c.id)), state.mode);
+    message.textContent = pending ? `${pending.type === 'airplaneSingle' ? '飞机带单' : '飞机带对'} · 再选 ${pending.missing} 张` : `已选 ${selected.size} 张 · 暂未组成有效牌型`;
+    if (!pending) message.classList.add('invalid');
+  }
   else if (state.openingLead && !effectiveHand().filter(c => selected.has(c.id)).some(card => card.id === 1)) { message.textContent = '首手须包含红桃3'; message.classList.add('invalid'); }
   else if (!beats(combo, state.lastPlay?.combo)) { message.textContent = `${combo.name} · 压不过上一手牌`; message.classList.add('invalid'); }
   else if (selectionAdjustment) message.innerHTML = `已整理为${escape(combo.name)} · ${selected.size} 张 <button type="button" class="selection-undo" data-action="undo-selection">撤销</button>`;
@@ -503,7 +507,7 @@ function scheduleSelectionAssist() {
   selectionAssistTimer = setTimeout(() => {
     if (selectionGesture || state?.phase !== 'playing' || !myTurn() || me().skill?.pending || busy || !connected || document.hidden || selected.size < 2) return;
     const cards = effectiveHand().filter(card => selected.has(card.id));
-    if (beats(classify(cards), state.lastPlay?.combo)) return;
+    if (beats(classify(cards), state.lastPlay?.combo) || pendingAirplaneWings(cards, state.mode)) return;
     const closest = findClosestSelection(cards, state.lastPlay?.combo);
     if (!closest || closest.length === cards.length) return;
     selectionAdjustment = new Set(selected);
