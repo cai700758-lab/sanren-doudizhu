@@ -105,7 +105,7 @@ test('race five threes outrank the two-joker rocket without changing classic rul
   assert.equal(findClosestSelection([...threes, deck[52]], classify(rocket, 'race'), 'race').length, 5);
 });
 
-test('race recycles discards, keeps 108 physical cards, and finishes at 36 played cards', async t => {
+test('race recycles discards, keeps 108 physical cards, and finishes at 48 played cards', async t => {
   const { players, room, ok } = await setup(t);
   const owner = room.players[room.turn], client = players.find(item => item.id === owner.id);
   await ok(client, 'play', { cards: [1] });
@@ -113,10 +113,10 @@ test('race recycles discards, keeps 108 physical cards, and finishes at 36 playe
   const pair = findHint(owner.hand, { type: 'pair', rank: 2, chain: 1, size: 2 }, 'race');
   assert.equal(pair.length, 2);
   room.discardPile.push(...room.drawPile.splice(0, room.drawPile.length - 1));
-  owner.playedCount = 33;
+  owner.playedCount = 45;
   await ok(client, 'play', { cards: pair.map(card => card.id) });
   assert.equal(owner.hand.length, 18);
-  assert.equal(owner.playedCount, 35);
+  assert.equal(owner.playedCount, 47);
   assert.ok(room.drawPile.length > 0);
   const physical = [...room.players.flatMap(player => player.hand), ...room.drawPile, ...room.discardPile];
   assert.equal(physical.length, 108);
@@ -124,7 +124,7 @@ test('race recycles discards, keeps 108 physical cards, and finishes at 36 playe
   clearTimeout(room.timer); room.actionAt = 0; room.turn = room.players.indexOf(owner); room.lastPlay = null;
   await ok(client, 'play', { cards: [owner.hand[0].id] });
   assert.equal(room.phase, 'finished'); assert.equal(room.result.winnerId, owner.id);
-  assert.equal(owner.playedCount, 36); assert.equal(owner.hand.length, 18);
+  assert.equal(owner.playedCount, 48); assert.equal(owner.hand.length, 18);
   assert.equal(owner.score, 1); assert.ok(room.players.filter(player => player !== owner).every(player => player.score === 0));
   await until(() => players.every(player => player.state.phase === 'finished'));
   for (const player of players) await ok(player, 'ready', { ready: true });
@@ -135,7 +135,7 @@ test('race recycles discards, keeps 108 physical cards, and finishes at 36 playe
 test('race bots can play a full round with pass draws', async t => {
   const { room } = await setup(t, true, { turnMs: 15, botDelayMs: 1 });
   await until(() => room.phase === 'finished', 15000);
-  assert.ok(room.players.some(player => player.playedCount >= 36));
+  assert.ok(room.players.some(player => player.playedCount >= 48));
   assert.ok(room.players.every(player => player.hand.length >= 18));
   const physical = [...room.players.flatMap(player => player.hand), ...room.drawPile, ...room.discardPile];
   assert.equal(physical.length, 108);

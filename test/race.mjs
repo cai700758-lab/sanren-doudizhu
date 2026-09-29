@@ -61,15 +61,15 @@ try {
   assert.equal(await newCard.evaluate(node => node.classList.contains('just-drawn')), false, 'selection replaces the draw highlight');
   await page.waitForFunction(() => document.querySelector('.draw-count')?.textContent === '53 张');
   assert.equal(owner.hand.length, 18); assert.equal(owner.playedCount, 1);
-  assert.ok((await page.locator('#scores').textContent()).includes('已打 1/36'));
+  assert.ok((await page.locator('#scores').textContent()).includes('已打 1/48'));
   for (const other of pages.filter(item => item !== page)) {
-    await other.waitForFunction(() => document.querySelector('#scores')?.textContent.includes('已打 1/36'));
+    await other.waitForFunction(() => document.querySelector('#scores')?.textContent.includes('已打 1/48'));
     assert.equal(await other.locator('#hand .playing-card').count(), 18);
   }
   for (const viewer of pages) {
     assert.equal(await viewer.locator('.player-info .avatar-progress .race-progress').count(), 3);
     assert.equal(await viewer.locator('.seat-status .race-progress').count(), 0);
-    assert.equal(await viewer.locator(`.player-info[data-player-id="${owner.id}"] .race-progress`).textContent(), '1/36');
+    assert.equal(await viewer.locator(`.player-info[data-player-id="${owner.id}"] .race-progress`).textContent(), '1/48');
   }
   const passer = room.players[room.turn], passerPage = pages[room.turn];
   const passerCards = new Set(passer.hand.map(card => card.id));
@@ -80,7 +80,7 @@ try {
   assert.equal(await passerPage.locator('#hand .playing-card').count(), 19);
   assert.equal(await passerPage.locator('#my-play .pass-label').textContent(), '不出');
   assert.ok((await passerPage.locator('#my-play .play-caption').textContent()).includes('摸 1 张'));
-  assert.equal(await passerPage.locator(`.player-info[data-player-id="${passer.id}"] .race-progress`).textContent(), '0/36');
+  assert.equal(await passerPage.locator(`.player-info[data-player-id="${passer.id}"] .race-progress`).textContent(), '0/48');
   for (const viewer of pages.filter(item => item !== passerPage)) {
     await viewer.waitForFunction(id => document.querySelector(`.player-info[data-player-id="${id}"]`)?.closest('.player-slot')?.querySelectorAll('.facedown-card').length === 19, passer.id);
   }
@@ -102,7 +102,7 @@ try {
     await passerPage.screenshot({ path: viewport.width === 320 ? 'test-results/race-pass-mobile.png' : 'test-results/race-pass-landscape.png', animations: 'disabled' });
   }
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  clearTimeout(room.timer); room.turn = lead; room.lastPlay = null; room.actionAt = 0; owner.playedCount = 35;
+  clearTimeout(room.timer); room.turn = lead; room.lastPlay = null; room.actionAt = 0; owner.playedCount = 47;
   await page.reload(); await page.locator('[data-action="hint"]:not([disabled])').waitFor();
   await page.locator('[data-action="hint"]').click();
   await page.locator('[data-action="play"]:not([disabled])').click();
@@ -111,7 +111,7 @@ try {
   assert.equal(await page.locator('.race-draw-card').count(), 0, 'reduced motion does not create flying cards');
   assert.equal(await page.locator('#hand .just-drawn').count(), 1, 'reduced motion keeps the visible draw highlight');
   assert.equal(await page.locator('#hand .just-drawn').evaluate(node => node.getAnimations().length), 0, 'reduced motion does not lift cards');
-  assert.ok((await page.locator('#selection-message').textContent()).includes('率先打出36张'));
+  assert.ok((await page.locator('#selection-message').textContent()).includes('率先打出48张'));
   assert.deepEqual(errors, []);
-  console.log('Race UI passed: 36-card target, private draw on play and pass, visible draw highlight, avatar progress, responsive 19-card hand and result.');
+  console.log('Race UI passed: 48-card target, private draw on play and pass, visible draw highlight, avatar progress, responsive 19-card hand and result.');
 } finally { await browser.close(); await game.close(); }
