@@ -60,6 +60,18 @@ try {
   assert.equal(room.players[0].skill.used, true);
   assert.equal(await page.locator('.skill-announcement').isVisible(), true);
   assert.equal(await page.locator('.skill-motion-layer').getAttribute('data-target'), recipient.id);
+  room.players[0].skill = { id: 'steal', used: false, choices: null };
+  const actorCount = room.players[0].hand.length, targetCount = recipient.hand.length;
+  await page.reload(); await page.locator('#skill-button:not([disabled])').waitFor();
+  await page.locator('#skill-button').click();
+  assert.equal(await page.locator('label[for="skill-target"]').textContent(), '从谁手中拿牌');
+  assert.equal(await page.locator('#skill-target option').count(), 3);
+  await page.locator('#skill-target').selectOption(recipient.id);
+  await page.locator('[data-skill-use]').click();
+  assert.equal(room.players[0].hand.length, actorCount + 2);
+  assert.equal(recipient.hand.length, targetCount - 2);
+  assert.equal(await page.locator('.skill-announcement[data-skill="steal"]').isVisible(), true);
+  assert.equal(await page.locator('.skill-motion-layer').getAttribute('data-target'), recipient.id);
   assert.deepEqual(errors, []);
-  console.log('Four-player skills UI: simplified lobby, mode setup, 43 cards, five portrait/landscape viewports, target choice and skill animation passed.');
+  console.log('Four-player skills UI: simplified lobby, mode setup, 43 cards, five portrait/landscape viewports, gift and steal targeting and animations passed.');
 } finally { await browser.close(); await game.close(); }

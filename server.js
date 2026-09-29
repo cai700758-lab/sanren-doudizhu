@@ -73,11 +73,11 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
         if (room.phase === 'bidding') bid(room, p, chooseBotBid(p.hand, room.highestBid));
         else {
           if (p.skill && !p.skill.used && (p.skill.id !== 'upgrade' || p.hand.some(canUpgrade))) {
-            const recipient = p.skill.id === 'peek'
-              ? room.players.find(player => player !== p && (p.id === room.landlordId || player.id === room.landlordId))
+            const recipient = ['peek', 'steal'].includes(p.skill.id)
+              ? room.players.find(player => player !== p && (p.id === room.landlordId || player.id === room.landlordId) && (p.skill.id !== 'steal' || player.hand.length > 2))
               : room.players.find(player => player !== p && player.id !== room.landlordId && p.id !== room.landlordId) || room.players.find(player => player !== p);
             const skillCard = p.skill.id === 'upgrade' ? p.hand.find(canUpgrade) : p.hand.at(-1);
-            useSkill(room, p, { cardId: skillCard.id, cardIds: p.skill.id === 'reroll' ? p.hand.slice(0, 2).map(card => card.id) : undefined, steps: p.skill.id === 'upgrade' ? Math.min(2, 17 - skillCard.rank) : undefined, targetId: recipient.id });
+            if (recipient) useSkill(room, p, { cardId: skillCard.id, cardIds: p.skill.id === 'reroll' ? p.hand.slice(0, 2).map(card => card.id) : undefined, steps: p.skill.id === 'upgrade' ? Math.min(2, 17 - skillCard.rank) : undefined, targetId: recipient.id });
             if (room.phase === 'finished') { publish(room); return; }
             if (p.skill.choices) completeSkillChoice(room, p, p.skill.choices[0].id);
           }
@@ -167,8 +167,12 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
     p.lastAction = `技能 · ${SKILLS[effect.id].name}`;
     recordSkillEvent(room, p, effect.id, { ...(effect.targetId ? { targetId: effect.targetId } : {}), ...(effect.steps ? { steps: effect.steps } : {}), ...(effect.count ? { count: effect.count } : {}) });
     const targetName = room.players.find(player => player.id === effect.targetId)?.name;
-    log(room, `${p.name}使用${SKILLS[effect.id].name}${effect.id === 'gift' ? `，交给${targetName}${effect.count}张牌` : effect.id === 'peek' ? `，查看${targetName}的随机手牌` : effect.id === 'upgrade' ? `，升${effect.steps}级` : ''}。`);
+    log(room, `${p.name}使用${SKILLS[effect.id].name}${effect.id === 'gift' ? `，交给${targetName}${effect.count}张牌` : effect.id === 'steal' ? `，从${targetName}手中拿走${effect.count}张牌` : effect.id === 'peek' ? `，查看${targetName}的随机手牌` : effect.id === 'upgrade' ? `，升${effect.steps}级` : ''}。`);
     if (!p.hand.length) finish(room, p);
+    else if (effect.id === 'steal') {
+      const target = room.players.find(player => player.id === effect.targetId);
+      if (!target.hand.length) finish(room, target);
+    }
   }
   function play(room, p, ids, auto = false, assignments = {}) {
     if (room.phase !== 'playing' || room.players[room.turn] !== p) fail('还没轮到你出牌。');

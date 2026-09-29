@@ -46,7 +46,7 @@ try {
   assert.equal(await other.locator('[data-skill-use]').isDisabled(), true, 'off-turn skill is disabled');
   await other.locator('#skill-dialog [data-close]').click();
 
-  for (const id of ['gift', 'reroll', 'clone', 'draw', 'draft', 'wild', 'peek', 'upgrade', 'remove']) {
+  for (const id of ['gift', 'steal', 'reroll', 'clone', 'draw', 'draft', 'wild', 'peek', 'upgrade', 'remove']) {
     const p = room.players[leaderIndex];
     room.turn = leaderIndex; room.actionAt = 0; room.lastPlay = null; room.tablePlays = {}; room.tablePasses = {};
     p.hand = sortCards(makeDeck().slice(0, id === 'draw' ? 24 : id === 'remove' ? 1 : 20));
@@ -58,6 +58,10 @@ try {
     await page.screenshot({ path: `test-results/skill-icon-${id}.png`, fullPage: true, animations: 'disabled' });
     const before = p.hand.length;
     await page.locator('#skill-button').click();
+    if (id === 'steal') {
+      assert.equal(await page.locator('label[for="skill-target"]').textContent(), '从谁手中拿牌');
+      assert.equal(await page.locator('#skill-target option').count(), 2);
+    }
     assert.equal(await page.locator('#skill-title [data-skill-icon]').getAttribute('data-skill-icon'), id);
     await page.locator('#skill-dialog [data-close]').click();
     assert.equal(p.skill.used, false, 'viewing a skill does not consume it');
@@ -101,7 +105,7 @@ try {
       assert.equal(room.lastPlay.cards[0].rank, 17);
     } else {
       await page.locator('#skill-dialog').waitFor({ state: 'hidden' });
-      assert.equal(p.hand.length, before + ({ gift: -2, reroll: 0, clone: 2, draw: 4, remove: -1, upgrade: 0 }[id]));
+      assert.equal(p.hand.length, before + ({ gift: -2, steal: 2, reroll: 0, clone: 2, draw: 4, remove: -1, upgrade: 0 }[id]));
       if (id === 'upgrade') {
         assert.equal(p.hand.filter(card => card.rank === 17).length, 2);
         assert.equal(await page.locator('#hand [aria-label="大王"]').count(), 2);
@@ -133,5 +137,5 @@ try {
   assert.equal(room.phase, 'finished');
   assert.equal(room.result.winnerId, room.players[leaderIndex].id);
   assert.deepEqual(errors, []);
-  console.log('Skill UI passed: nine skills, private inspection and reconnect, upgrade to big joker, off-turn/used states, private draft, wildcard play, skill win and six responsive viewports.');
+  console.log('Skill UI passed: ten skills, private inspection and reconnect, upgrade to big joker, off-turn/used states, private draft, wildcard play, skill win and six responsive viewports.');
 } finally { await browser.close(); await game.close(); }

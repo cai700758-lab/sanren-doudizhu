@@ -34,7 +34,7 @@ try {
     if (await page.locator('#skill-target').count()) await page.locator('#skill-target').selectOption(recipient.id);
     await page.locator('[data-skill-use]:not([disabled])').click();
   }
-  for (const id of ['gift', 'wild', 'reroll', 'remove', 'clone', 'draw', 'draft', 'peek', 'upgrade']) {
+  for (const id of ['gift', 'steal', 'wild', 'reroll', 'remove', 'clone', 'draw', 'draft', 'peek', 'upgrade']) {
     room.turn = leader; room.lastPlay = null; room.tablePlays = {}; room.tablePasses = {};
     p.hand = sortCards(makeDeck().slice(0, 17)); p.skill = { id, used: false, choices: null };
     if (id === 'gift') recipient.skill = { id: 'clone', used: false, choices: null };
@@ -46,21 +46,29 @@ try {
       assert.equal(await page.locator('.skill-announcement [data-skill-icon]').getAttribute('data-skill-icon'), id);
       assert.ok(await page.locator(`.skill-motion-layer .skill-fx-card[data-skill="${id}"]`).count());
     }
-    if (id === 'gift') {
+    if (id === 'gift' || id === 'steal') {
       for (const page of pages) {
         assert.equal(await page.locator('.skill-motion-layer').getAttribute('data-target'), recipient.id);
         assert.ok((await page.locator('.skill-announcement-result').textContent()).includes(recipient.name));
-        const destination = await page.evaluate(targetId => {
-          const zone = [...document.querySelectorAll('.player-play')].find(node => node.dataset.playerId === targetId);
-          const target = document.querySelector(zone.id === 'my-play' ? '#hand' : zone.id === 'left-play' ? '#left-player .opponent-hand' : '#right-player .opponent-hand').getBoundingClientRect();
+        const direction = await page.evaluate(({ targetId, actorId }) => {
+          const seatCenter = playerId => {
+            const zone = [...document.querySelectorAll('.player-play')].find(node => node.dataset.playerId === playerId);
+            const box = document.querySelector(zone.id === 'my-play' ? '#hand' : zone.id === 'left-play' ? '#left-player .opponent-hand' : zone.id === 'top-play' ? '#top-player .opponent-hand' : '#right-player .opponent-hand').getBoundingClientRect();
+            return [box.x + box.width / 2, box.y + box.height / 2];
+          };
           const frames = document.querySelector('.skill-fx-card').getAnimations()[0].effect.getKeyframes();
-          const xy = /translate\(([-.\d]+)px, ([-.\d]+)px\)/.exec(frames.at(-1).transform);
-          return Math.abs(Number(xy[1]) - target.x - target.width / 2) < 1 && Math.abs(Number(xy[2]) - target.y - target.height / 2) < 1;
-        }, recipient.id);
-        assert.ok(destination, 'gift card flies to recipient in each viewer’s seat orientation');
+          const matches = (frame, playerId) => {
+            const xy = /translate\(([-.\d]+)px, ([-.\d]+)px\)/.exec(frame.transform), center = seatCenter(playerId);
+            return Math.abs(Number(xy[1]) - center[0]) < 1 && Math.abs(Number(xy[2]) - center[1]) < 1;
+          };
+          return { gift: matches(frames[0], actorId) && matches(frames.at(-1), targetId), steal: matches(frames[0], targetId) && matches(frames.at(-1), actorId) };
+        }, { targetId: recipient.id, actorId: p.id });
+        assert.ok(direction[id], `${id} card flies in the correct direction in each viewer’s seat orientation`);
       }
       await actor.waitForTimeout(850);
-      await pages[(leader + 2) % 3].screenshot({ path: 'test-results/skill-gift-flight.png' });
+      await pages[(leader + 2) % 3].screenshot({ path: `test-results/skill-${id}-flight.png` });
+    }
+    if (id === 'gift') {
       // Ordinary play and subsequent state updates must not wipe the skill notice.
       await actor.locator('#hand [data-card]').first().click({ position: { x: 8, y: 10 } });
       await actor.locator('[data-action="play"]:not([disabled])').click();
@@ -102,5 +110,5 @@ try {
   await actor.reload(); await actor.locator('#skill-button:not([disabled])').waitFor();
   assert.equal(await actor.locator('.skill-announcement').isVisible(), false, 'reconnect does not replay historical skills');
   assert.deepEqual(errors, []);
-  console.log('Skill effects passed: nine skills broadcast to all three seats, directed gifting, 5.2s notices survive plays, private draft completion, responsive layouts, reduced motion and reconnect.');
+  console.log('Skill effects passed: ten skills broadcast to all three seats, directed gifting and stealing, 5.2s notices survive plays, private draft completion, responsive layouts, reduced motion and reconnect.');
 } finally { await browser.close(); await game.close(); }

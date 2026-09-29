@@ -39,7 +39,7 @@ export function createSkillUI({ getState, send, cardHTML, getSelected, getWildRa
       if (skill.id === 'reroll' && me.hand.length > 1) html += `<label for="skill-card-2">第二张手牌</label><select id="skill-card-2">${cardOptions}</select>`;
       if (skill.id === 'upgrade') html += '<label for="skill-steps">提升点数</label><select id="skill-steps"><option value="1">升一级</option><option value="2">升两级</option></select>';
       if (skill.id === 'upgrade') html += `<p class="skill-status">${eligible.length ? '大王和万能牌不可升级' : '没有可升级的手牌'}</p>`;
-      if (info.target) html += `<label for="skill-target">${skill.id === 'peek' ? '查看谁的手牌' : '交给谁'}</label><select id="skill-target">${state.players.filter(player => player.id !== me.id).map(player => `<option value="${player.id}">${escape(player.name)} · ${player.id === state.landlordId ? '地主' : '农民'}</option>`).join('')}</select>`;
+      if (info.target) html += `<label for="skill-target">${skill.id === 'peek' ? '查看谁的手牌' : skill.id === 'steal' ? '从谁手中拿牌' : '交给谁'}</label><select id="skill-target">${state.players.filter(player => player.id !== me.id).map(player => `<option value="${player.id}">${escape(player.name)} · ${player.id === state.landlordId ? '地主' : '农民'} · ${player.count}张</option>`).join('')}</select>`;
       html += `<p class="skill-status">${ownTurn ? '每局一次 · 使用后继续出牌' : '轮到你出牌时可使用'}</p><button type="button" class="primary wide" data-skill-use${!ownTurn || isBlocked() || (info.card && !eligible.length) ? ' disabled' : ''}>${skill.id === 'draft' ? '抽取四张' : skill.id === 'peek' ? '查看手牌' : '使用技能'}</button>`;
     } else html += '<p class="skill-status">本局技能已使用</p>';
     if (skill.inspection) {

@@ -27,8 +27,8 @@ async function setup(t, mode = 'skills', bots = false, options = {}) {
   const host = await connect(); await ok(host, 'create', { name: '玩家甲', mode });
   const players = [host], room = game.rooms.get(host.state.code);
   if (bots) await ok(host, 'fill-bots');
-  else for (const name of ['玩家乙', '玩家丙']) { const client = await connect(); await ok(client, 'join', { code: room.code, name }); players.push(client); }
-  await until(() => players.every(client => client.state.players.length === 3));
+  else for (const name of (mode === 'fourSkills' ? ['玩家乙', '玩家丙', '玩家丁'] : ['玩家乙', '玩家丙'])) { const client = await connect(); await ok(client, 'join', { code: room.code, name }); players.push(client); }
+  await until(() => players.every(client => client.state.players.length === (mode === 'fourSkills' ? 4 : 3)));
   t.after(async () => { clients.forEach(client => client.socket.disconnect()); await game.close(); });
   async function begin() {
     for (const client of players) await ok(client, 'ready', { ready: true });
@@ -42,20 +42,27 @@ for (const id of SKILL_IDS) test(`skill ${id}: one use, turn unchanged, correct 
   const { players, room, begin, ok, action } = await setup(t); await begin();
   const p = room.players[room.turn], client = players.find(item => item.id === p.id), other = room.players.find(item => item !== p);
   p.skill = { id, used: false, choices: null };
-  const before = p.hand.map(card => ({ ...card })), otherCount = other.hand.length, deadline = room.deadline;
+  const before = p.hand.map(card => ({ ...card })), otherBefore = other.hand.map(card => ({ ...card })), otherCount = other.hand.length, deadline = room.deadline;
   await ok(client, 'skill', { cardId: (id === 'upgrade' ? before.find(canUpgrade) : before[0]).id, cardIds: before.slice(0, 2).map(card => card.id), targetId: other.id });
   await until(() => players.every(peer => peer.state.skillEvent?.skillId === id));
   for (const peer of players) {
-    assert.deepEqual(peer.state.skillEvent, { sequence: 1, playerId: p.id, skillId: id, stage: 'use', ...(['gift', 'peek'].includes(id) ? { targetId: other.id } : {}), ...(['gift', 'reroll', 'remove'].includes(id) ? { count: 2 } : {}), ...(id === 'upgrade' ? { steps: 1 } : {}) });
+    assert.deepEqual(peer.state.skillEvent, { sequence: 1, playerId: p.id, skillId: id, stage: 'use', ...(['gift', 'steal', 'peek'].includes(id) ? { targetId: other.id } : {}), ...(['gift', 'steal', 'reroll', 'remove'].includes(id) ? { count: 2 } : {}), ...(id === 'upgrade' ? { steps: 1 } : {}) });
     assert.deepEqual(peer.state.skillEvents, [peer.state.skillEvent], 'all seats receive the same public event without card faces');
   }
   assert.equal(p.skill.used, true); assert.equal(room.players[room.turn], p); assert.equal(room.deadline, deadline);
   if (id !== 'gift') assert.equal(room.log.at(-1).includes('交给'), false);
   assert.equal((await action(client, 'skill', { cardId: p.hand[0].id, targetId: other.id })).ok, false);
-  const countDelta = { wild: 0, gift: -2, reroll: 0, remove: -2, clone: 2, draw: 4, draft: 0, peek: 0, upgrade: 0 }[id];
+  const countDelta = { wild: 0, gift: -2, steal: 2, reroll: 0, remove: -2, clone: 2, draw: 4, draft: 0, peek: 0, upgrade: 0 }[id];
   assert.equal(p.hand.length, before.length + countDelta);
   assert.equal(new Set(p.hand.map(card => card.id)).size, p.hand.length);
   if (id === 'gift') { assert.equal(other.hand.length, otherCount + 2); assert.equal(before.filter(card => other.hand.some(item => item.id === card.id)).length, 2); }
+  if (id === 'steal') {
+    assert.equal(other.hand.length, otherCount - 2);
+    assert.equal(otherBefore.filter(card => p.hand.some(item => item.id === card.id)).length, 2);
+    assert.deepEqual(new Set([...p.hand, ...other.hand].map(card => card.id)), new Set([...before, ...otherBefore].map(card => card.id)));
+    for (const peer of players.filter(item => item !== client && item.id !== other.id)) assert.equal(peer.state.players.find(item => item.id === p.id).hand, undefined);
+    assert.match(room.log.at(-1), /拿走2张牌/);
+  }
   if (id === 'wild') assert.equal(p.hand.filter(card => card.wild).length, 1);
   if (id === 'remove') for (const card of [...before].sort((a, b) => a.rank - b.rank || a.id - b.id).slice(0, 2)) assert.equal(p.hand.some(item => item.id === card.id), false);
   if (id === 'reroll') for (const card of before.slice(0, 2)) assert.equal(p.hand.some(item => item.id === card.id), false);
@@ -181,6 +188,24 @@ for (const id of ['gift', 'remove']) test(`${id} can win by emptying the hand; n
   await until(() => players.every(item => item.state.phase === 'finished'));
   for (const peer of players) await ok(peer, 'ready', { ready: true });
   assert.equal(room.phase, 'bidding'); assert.ok(room.players.every(item => SKILL_IDS.includes(item.skill.id) && !item.skill.used));
+});
+
+for (const mode of ['skills', 'fourSkills']) for (const count of [1, 2]) test(`steal in ${mode} transfers ${count} remaining cards and awards the emptied target`, async t => {
+  const { players, room, begin, ok, action } = await setup(t, mode); await begin();
+  const actor = room.players[room.turn], client = players.find(item => item.id === actor.id);
+  const target = room.players.find(item => item !== actor), taken = target.hand.slice(0, count);
+  const actorBefore = actor.hand.length;
+  actor.skill = { id: 'steal', used: false, choices: null }; target.hand = taken;
+  assert.equal((await action(client, 'skill', { targetId: actor.id })).ok, false);
+  assert.equal((await action(client, 'skill', { targetId: 'invalid' })).ok, false);
+  assert.equal(actor.skill.used, false);
+  await ok(client, 'skill', { targetId: target.id });
+  assert.equal(room.phase, 'finished'); assert.equal(room.result.winnerId, target.id);
+  assert.equal(target.hand.length, 0); assert.equal(actor.hand.length, actorBefore + count);
+  assert.ok(taken.every(card => actor.hand.some(item => item.id === card.id)));
+  await until(() => players.every(peer => peer.state.phase === 'finished'));
+  assert.equal(client.state.skillEvent.count, count);
+  assert.equal((await action(client, 'skill', { targetId: target.id })).ok, false);
 });
 
 test('pending draft survives reconnect and a timeout finishes the choice', async t => {

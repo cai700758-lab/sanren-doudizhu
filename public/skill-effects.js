@@ -10,6 +10,7 @@ export function skillOutcome(event, players) {
   return {
     wild: '随机手牌已变为万能牌 · 可替代大小王',
     gift: `已交给 ${target} ${event.count || 2} 张牌 · 自己 −${event.count || 2} / 对方 +${event.count || 2}`,
+    steal: `已从 ${target} 手中拿走 ${event.count ?? 0} 张牌 · 自己 +${event.count ?? 0} / 对方 −${event.count ?? 0}`,
     reroll: `${event.count || 2} 张手牌已随机替换 · 张数不变`,
     remove: `最小的 ${event.count || 2} 张牌已移除 · 手牌 −${event.count || 2}`,
     clone: '已随机复制两张手牌 · 手牌 +2',
@@ -99,6 +100,10 @@ export function createSkillEffects({ reducedMotion }) {
       const to = seat(event.targetId);
       for (let i = 0; i < (event.count || 2); i++) fly(from, to, { delay: 350 + i * 250, index: i });
       pulse(from, `−${event.count || 2}`, 350); pulse(to, `+${event.count || 2}`, 1700);
+    } else if (event.skillId === 'steal') {
+      const target = seat(event.targetId);
+      for (let i = 0; i < event.count; i++) fly(target, from, { delay: 350 + i * 250, index: i });
+      if (event.count) { pulse(target, `−${event.count}`, 350); pulse(from, `+${event.count}`, 1700); }
     } else if (event.skillId === 'peek') {
       const target = seat(event.targetId);
       const node = card(target, 'peek');
