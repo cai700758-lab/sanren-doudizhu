@@ -381,7 +381,7 @@ label { font-size: 14px; font-weight: 700; color: var(--color-ink); margin-block
 .playing-card.back::after { border: 0; }
 .hand { padding-top: 20px; padding-bottom: 12px; }
 .hand-row { padding-bottom: 8px; }
-.hand .playing-card { transition: transform 120ms var(--ease-out); user-select: none; }
+.hand .playing-card { transition: transform 120ms var(--ease-out), background-color 320ms, border-color 320ms, box-shadow 320ms; user-select: none; }
 .hand .playing-card.selected { transform: translateY(-14px); border-color: var(--color-accent-edge); background: var(--color-card-selected); box-shadow: 0 3px 0 var(--color-accent-edge); }
 .hand .playing-card:active { transform: translateY(-3px); }
 .hand .playing-card.selected:active { transform: translateY(-10px); }
@@ -1140,7 +1140,7 @@ body:not(.in-game) .site-header .connection { display: none; }
 .race-mode .race-progress strong { font: 900 22px/1 var(--font-display); }
 .race-mode .race-progress small { font: 800 11px/1 var(--font-display); color: inherit; }
 .race-mode .my-footer .player-info { gap: 9px; }
-.race-draw-card { position: absolute; z-index: 1; margin: 0; border-radius: 7px; box-shadow: 0 8px 15px #052d2699; }
+.race-mode .hand .playing-card.just-drawn:not(.selected) { background: #e9fff6; border-color: #48c9aa; box-shadow: inset 3px 0 0 #159779, 0 3px 0 #168d78, 0 0 0 1px #8ce8ca; }
 .race-mode .bottom-area { color: var(--color-table-gold); font-weight: 800; }
 .race-mode .draw-count { display: inline-block; margin-top: 4px; font-size: 15px; font-variant-numeric: tabular-nums; }
 @media (width < 600px), (height < 550px) {

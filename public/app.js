@@ -60,7 +60,7 @@ $('#table-button').addEventListener('click', () => {
   heading.tabIndex = -1; heading.focus({ preventScroll: true });
   heading.scrollIntoView({ block: 'nearest' });
 });
-let state = null, selected = new Set(), busy = false, connected = false, clockOffset = 0, toastTimer;
+let state = null, selected = new Set(), recentDrawn = new Map(), busy = false, connected = false, clockOffset = 0, toastTimer;
 let selectionAssistTimer, selectionAdjustment = null;
 let roomMode = Object.hasOwn(MODES, storage.get('sanren-mode', true)) ? storage.get('sanren-mode', true) : 'classic';
 $('#create-options [name="room-size"][value="' + modeRules(roomMode).players + '"]').checked = true;
@@ -119,13 +119,15 @@ socket.on('state', next => {
   if (state) {
     clockOffset = state.serverNow - Date.now();
     const handIds = new Set(me().hand.map(c => c.id));
-    if (previous?.code !== state.code || previous?.dealId !== state.dealId) wildRanks = {};
+    if (previous?.code !== state.code || previous?.dealId !== state.dealId) { wildRanks = {}; recentDrawn.clear(); }
     else wildRanks = Object.fromEntries(Object.entries(wildRanks).filter(([id]) => handIds.has(Number(id))));
+    recentDrawn = new Map([...recentDrawn].filter(([id, expiry]) => handIds.has(id) && expiry > Date.now()));
     selected = new Set([...selected].filter(id => handIds.has(id)));
     if (previous?.round !== state.round || previous?.phase !== state.phase) selected.clear();
     const url = new URL(location.href); url.searchParams.set('room', state.code); history.replaceState(null, '', url);
   } else {
     selected.clear();
+    recentDrawn.clear();
     if (previous) { const url = new URL(location.href); url.searchParams.delete('room'); history.replaceState(null, '', url); }
     for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
   }
@@ -191,7 +193,7 @@ function cardHTML(card, { mini = false, interactive = false } = {}) {
   const isSelected = selected.has(card.id);
   const label = card.wild ? `<span>万</span><span class="wild-rank-label">${rankLabel(card.rank)}</span>` : card.rank >= 16 ? `<span class="joker-text">${rankLabel(card.rank)}</span>` : `<span>${rankLabel(card.rank)}</span><span class="suit">${card.suit}</span>`;
   const content = `<span class="card-index">${label}</span><span class="center-suit" aria-hidden="true">${card.suit}</span>`;
-  const classes = `playing-card${red ? ' red' : ''}${card.wild ? ' wild-card' : ''}${mini ? ' mini' : ''}${interactive && isSelected ? ' selected' : ''}`;
+  const classes = `playing-card${red ? ' red' : ''}${card.wild ? ' wild-card' : ''}${mini ? ' mini' : ''}${interactive && isSelected ? ' selected' : ''}${interactive && isRaceMode(state?.mode) && (recentDrawn.get(card.id) || 0) > Date.now() ? ' just-drawn' : ''}`;
   const name = card.wild ? `万能牌，当作${rankLabel(card.rank)}` : `${card.rank >= 16 ? '' : card.suit}${rankLabel(card.rank)}`;
   return interactive
     ? `<button class="${classes}" data-card="${card.id}" data-card-id="${card.id}" data-rank="${card.rank}" aria-label="${name}" aria-pressed="${isSelected}" type="button">${content}</button>`
@@ -508,6 +510,13 @@ function scheduleSelectionAssist() {
 function syncSelection() {
   for (const card of $('#hand').querySelectorAll('[data-card]')) {
     const chosen = selected.has(Number(card.dataset.card));
+    if (chosen && card.classList.contains('just-drawn')) {
+      recentDrawn.delete(Number(card.dataset.card));
+      card.classList.remove('just-drawn');
+      for (const animation of card.getAnimations()) {
+        if (animation.effect?.getKeyframes().some(frame => frame.transform === 'translateY(-16px)')) animation.cancel();
+      }
+    }
     card.classList.toggle('selected', chosen); card.setAttribute('aria-pressed', String(chosen));
   }
   renderActions();
@@ -636,29 +645,10 @@ function flyToCard(node, source, delay = 0, duration = 700) {
     if (animation) animation.finished.then(cleanup, cleanup); else cleanup();
   }
 }
-function animateRaceDraw(previous, next, origins) {
+function animateRaceDraw(previous, next, origins, motion = true) {
   if (!isRaceMode(next.mode)) return;
   const actor = next.players.find(player => player.playedCount > (previous.players.find(old => old.id === player.id)?.playedCount || 0));
   if (!actor) return;
-  const oldCount = previous.players.find(player => player.id === actor.id)?.playedCount || 0;
-  const count = actor.playedCount - oldCount;
-  const layer = $('#animation-layer'), layerBox = layer.getBoundingClientRect();
-  const source = { x: origins.bottom.left + origins.bottom.width / 2, y: origins.bottom.top + origins.bottom.height / 2 };
-  const flyBack = (target, index, reveal) => {
-    const back = document.createElement('span');
-    back.className = 'playing-card back race-draw-card';
-    Object.assign(back.style, { left: `${target.x - target.width / 2 - layerBox.left}px`, top: `${target.y - target.height / 2 - layerBox.top}px`, width: `${target.width}px`, height: `${target.height}px` });
-    layer.append(back);
-    const dx = source.x - target.x, dy = source.y - target.y;
-    const motion = moveCard(back, [
-      { opacity: 0, transform: `translate(${dx}px, ${dy}px) scale(.55) rotate(-12deg)` },
-      { opacity: 1, transform: `translate(${dx * .55}px, ${dy * .55 - 25}px) scale(.85) rotate(-5deg)`, offset: .4 },
-      { opacity: 1, transform: 'translate(0, 0) scale(1.06)', offset: .84 },
-      { opacity: 0, transform: 'translate(0, 0) scale(1)' },
-    ], { duration: 760, delay: Math.min(index, 10) * 55, fill: 'backwards' });
-    const done = () => { back.remove(); reveal?.(); };
-    if (motion) motion.finished.then(done, done); else done();
-  };
   if (actor.id === next.me) {
     const oldIds = new Set(previous.players.find(player => player.id === next.me).hand.map(card => card.id));
     const playedIds = new Set(next.tablePlays?.[next.me]?.cards.map(card => card.id) || []);
@@ -669,30 +659,34 @@ function animateRaceDraw(previous, next, origins) {
       const id = Number(node.dataset.cardId), old = origins.hand.get(id);
       if (!old || drawnIds.has(id)) continue;
       const target = node.getBoundingClientRect(), dx = old.left - target.left, dy = old.top - target.top;
-      if (Math.abs(dx) + Math.abs(dy) > 2) moveCard(node, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }], { duration: 540, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      if (motion && Math.abs(dx) + Math.abs(dy) > 2) moveCard(node, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }], { duration: 420, easing: 'cubic-bezier(.2,.8,.2,1)' });
     }
     drawn.forEach((node, index) => {
-      const rect = node.getBoundingClientRect();
-      node.style.visibility = 'hidden';
-      flyBack({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, width: rect.width, height: rect.height }, index, () => {
-        if (!node.isConnected) return;
-        node.style.visibility = '';
-        moveCard(node, [{ opacity: .4, transform: 'translateY(-10px) scaleX(.7)' }, { opacity: 1, transform: 'translateY(0) scaleX(1)' }], { duration: 260 });
-      });
+      const id = Number(node.dataset.cardId), expiry = Date.now() + 2200;
+      recentDrawn.set(id, expiry);
+      node.classList.add('just-drawn');
+      if (motion) moveCard(node, [
+        { transform: 'translateY(0)' },
+        { transform: 'translateY(-16px)', offset: .18 },
+        { transform: 'translateY(-16px)', offset: .58 },
+        { transform: 'translateY(0)', offset: 1 },
+      ], { duration: 1100, delay: Math.min(index, 8) * 65, easing: 'cubic-bezier(.2,.75,.25,1)' });
+      setTimeout(() => {
+        if (recentDrawn.get(id) !== expiry) return;
+        recentDrawn.delete(id);
+        $('#hand').querySelector(`[data-card-id="${id}"]`)?.classList.remove('just-drawn');
+      }, 2200);
     });
-  } else {
+  } else if (motion) {
     const seat = [...document.querySelectorAll('.player-info')].find(node => node.dataset.playerId === actor.id)?.closest('.player-slot');
-    const pile = seat?.querySelector('.opponent-hand');
-    if (pile) {
-      const rect = pile.getBoundingClientRect();
-      for (let index = 0; index < count; index++) flyBack({ x: rect.left + rect.width * (.42 + Math.min(index, 8) * .025), y: rect.top + rect.height / 2, width: Math.min(32, rect.height * .75), height: Math.min(44, rect.height) }, index);
-    }
+    moveCard(seat?.querySelector('.opponent-hand'), [{ filter: 'brightness(1)' }, { filter: 'brightness(1.35)', offset: .45 }, { filter: 'brightness(1)' }], { duration: 600 });
   }
   const counter = [...document.querySelectorAll('.player-info')].find(node => node.dataset.playerId === actor.id)?.querySelector('.race-progress');
-  moveCard(counter, [{ transform: 'scale(1)', filter: 'brightness(1)' }, { transform: 'scale(1.22)', filter: 'brightness(1.25)', offset: .45 }, { transform: 'scale(1)', filter: 'brightness(1)' }], { duration: 760 });
+  if (motion) moveCard(counter, [{ transform: 'scale(1)', filter: 'brightness(1)' }, { transform: 'scale(1.22)', filter: 'brightness(1.25)', offset: .45 }, { transform: 'scale(1)', filter: 'brightness(1)' }], { duration: 760 });
 }
 function animateTableUpdate(previous, next, origins) {
-  if (!previous || !next || previous.code !== next.code || reducedMotion.matches || document.visibilityState !== 'visible') return;
+  if (!previous || !next || previous.code !== next.code || document.visibilityState !== 'visible') return;
+  if (reducedMotion.matches) { animateRaceDraw(previous, next, origins, false); return; }
   if (next.dealId !== previous.dealId && ['bidding', 'playing'].includes(next.phase)) {
     $('.arena').dataset.motion = 'shuffle';
     const layer = $('#animation-layer');
@@ -756,7 +750,14 @@ document.addEventListener('click', async event => {
   if (action === 'fill-bots') await send('fill-bots');
   if (action === 'remove-bot') await send('remove-bot', { id: button.dataset.botId });
   if (action.startsWith('bid-')) await send('bid', { value: Number(action.slice(4)) });
-  if (action === 'play') { if (await send('play', { cards: [...selected], wildRanks: Object.fromEntries(effectiveHand().filter(card => card.wild && selected.has(card.id)).map(card => [card.id, card.rank])) })) { selected.clear(); renderHand(); renderActions(); } }
+  if (action === 'play') {
+    const revision = state.revision;
+    if (await send('play', { cards: [...selected], wildRanks: Object.fromEntries(effectiveHand().filter(card => card.wild && selected.has(card.id)).map(card => [card.id, card.rank])) })) {
+      selected.clear();
+      if (state.revision === revision) renderHand(); else syncSelection();
+      renderActions();
+    }
+  }
   if (action === 'pass') { if (await send('pass')) { selected.clear(); renderHand(); renderActions(); } }
   if (action === 'clear') { selected.clear(); renderHand(); renderActions(); }
   if (action === 'hint') {

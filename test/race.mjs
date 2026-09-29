@@ -39,25 +39,26 @@ try {
   assert.equal(await page.locator('#hand [aria-pressed="true"]').count(), 1);
   assert.equal(await page.locator('#hand [aria-pressed="true"]').getAttribute('data-card'), '1');
   const previousCards = new Set(owner.hand.map(card => card.id));
-  const faceHiddenDuringFlight = page.evaluate(() => new Promise(resolve => {
-    const layer = document.querySelector('#animation-layer');
-    const observer = new MutationObserver(() => {
-      if (!layer.querySelector('.race-draw-card')) return;
-      observer.disconnect();
-      resolve([...document.querySelectorAll('#hand [data-card-id]')].some(node => getComputedStyle(node).visibility === 'hidden'));
-    });
-    observer.observe(layer, { childList: true });
-    setTimeout(() => { observer.disconnect(); resolve(false); }, 4000);
-  }));
-  const flightStarts = pages.map(viewer => viewer.locator('.race-draw-card.back').first().waitFor({ timeout: 4000 }));
   await page.locator('[data-action="play"]:not([disabled])').click();
-  assert.equal(await faceHiddenDuringFlight, true, 'new card face stays hidden while the back flies in');
-  await Promise.all(flightStarts);
   const drawn = owner.hand.find(card => !previousCards.has(card.id));
   assert.ok(drawn, 'one card is drawn from the second deck');
-  await page.screenshot({ path: 'test-results/race-draw-flight.png' });
-  await page.locator('.race-draw-card').first().waitFor({ state: 'detached', timeout: 4000 });
-  assert.equal(await page.locator(`#hand [data-card-id="${drawn.id}"]`).evaluate(node => getComputedStyle(node).visibility), 'visible');
+  const newCard = page.locator(`#hand [data-card-id="${drawn.id}"]`);
+  await newCard.waitFor({ state: 'visible' });
+  await page.waitForFunction(id => document.querySelector(`#hand [data-card-id="${id}"]`)?.classList.contains('just-drawn'), drawn.id);
+  const reveal = await newCard.evaluate(node => ({
+    visible: getComputedStyle(node).visibility,
+    selected: node.getAttribute('aria-pressed'),
+    hasLift: node.getAnimations().some(animation => animation.effect?.getKeyframes().some(frame => frame.transform === 'translateY(-16px)')),
+  }));
+  assert.equal(reveal.visible, 'visible', 'the drawn card face is visible immediately');
+  assert.equal(reveal.selected, 'false', 'drawn-card highlight differs from selection');
+  assert.equal(reveal.hasLift, true, 'new card lifts and settles in its sorted position');
+  await page.waitForFunction(id => getComputedStyle(document.querySelector(`#hand [data-card-id="${id}"]`)).backgroundColor === 'rgb(233, 255, 246)', drawn.id);
+  for (const viewer of pages) assert.equal(await viewer.locator('.race-draw-card').count(), 0, 'no card backs fly across the table');
+  await page.screenshot({ path: 'test-results/race-draw-highlight.png' });
+  await newCard.click({ position: { x: 9, y: 10 } });
+  assert.equal(await newCard.getAttribute('aria-pressed'), 'true', 'a newly drawn card can be selected immediately');
+  assert.equal(await newCard.evaluate(node => node.classList.contains('just-drawn')), false, 'selection replaces the draw highlight');
   await page.waitForFunction(() => document.querySelector('.draw-count')?.textContent === '53 张');
   assert.equal(owner.hand.length, 18); assert.equal(owner.playedCount, 1);
   assert.ok((await page.locator('#scores').textContent()).includes('已打 1/30'));
@@ -70,6 +71,7 @@ try {
     assert.equal(await viewer.locator('.seat-status .race-progress').count(), 0);
     assert.equal(await viewer.locator(`.player-info[data-player-id="${owner.id}"] .race-progress`).textContent(), '1/30');
   }
+  await page.waitForFunction(id => !document.querySelector(`#hand [data-card-id="${id}"]`)?.classList.contains('just-drawn'), drawn.id);
   await page.screenshot({ path: 'test-results/race-desktop.png', animations: 'disabled' });
   for (const viewport of [{ width: 320, height: 667 }, { width: 375, height: 667 }, { width: 844, height: 390 }]) {
     await page.setViewportSize(viewport);
@@ -86,8 +88,10 @@ try {
   await page.locator('[data-action="play"]:not([disabled])').click();
   await page.waitForFunction(() => document.querySelector('.arena')?.dataset.phase === 'finished');
   assert.equal(room.result.winnerId, owner.id);
-  assert.equal(await page.locator('.race-draw-card').count(), 0, 'reduced motion updates the hand without flying cards');
+  assert.equal(await page.locator('.race-draw-card').count(), 0, 'reduced motion does not create flying cards');
+  assert.equal(await page.locator('#hand .just-drawn').count(), 1, 'reduced motion keeps the visible draw highlight');
+  assert.equal(await page.locator('#hand .just-drawn').evaluate(node => node.getAnimations().length), 0, 'reduced motion does not lift cards');
   assert.ok((await page.locator('#selection-message').textContent()).includes('率先打出30张'));
   assert.deepEqual(errors, []);
-  console.log('Race UI passed: mode creation, first-heart-three hint, private draw flights and face reveal, avatar progress, three-seat sync, responsive layout and 30-card result.');
+  console.log('Race UI passed: mode creation, first-heart-three hint, visible draw highlight and lift, avatar progress, three-seat sync, responsive layout and 30-card result.');
 } finally { await browser.close(); await game.close(); }
