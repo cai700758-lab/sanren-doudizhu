@@ -56,6 +56,41 @@ test('race deals only the first deck, requires the original heart three, then re
   assert.equal(opponent.state.players.find(player => player.id === owner.id).hand, undefined);
 });
 
+test('race passing draws one private card without increasing progress', async t => {
+  const { players, room, ok } = await setup(t);
+  const lead = room.players[room.turn], leader = players.find(player => player.id === lead.id);
+  await ok(leader, 'play', { cards: [1] });
+  const passer = room.players[room.turn], client = players.find(player => player.id === passer.id);
+  const before = new Set(passer.hand.map(card => card.id));
+  const pileBefore = room.drawPile.length;
+  await until(() => client.state.revision === room.revision);
+  await ok(client, 'pass');
+  assert.equal(passer.hand.length, 19);
+  assert.equal(passer.playedCount, 0);
+  assert.equal(room.drawPile.length, pileBefore - 1);
+  assert.equal(room.tablePasses[passer.id].drawn, 1);
+  assert.equal(passer.hand.filter(card => !before.has(card.id)).length, 1);
+  await until(() => leader.state.players.find(player => player.id === passer.id).count === 19);
+  assert.equal(leader.state.players.find(player => player.id === passer.id).hand, undefined);
+  const physical = [...room.players.flatMap(player => player.hand), ...room.drawPile, ...room.discardPile];
+  assert.equal(physical.length, 108);
+  assert.equal(new Set(physical.map(card => card.id)).size, 108);
+});
+
+test('race passing safely handles an empty stock and discard pile', async t => {
+  const { players, room, ok } = await setup(t);
+  const leader = players.find(player => player.id === room.players[room.turn].id);
+  await ok(leader, 'play', { cards: [1] });
+  const passer = room.players[room.turn], client = players.find(player => player.id === passer.id);
+  room.players.find(player => player !== passer).hand.push(...room.drawPile.splice(0), ...room.discardPile.splice(0));
+  const before = passer.hand.length;
+  await until(() => client.state.revision === room.revision);
+  await ok(client, 'pass');
+  assert.equal(passer.hand.length, before);
+  assert.equal(room.tablePasses[passer.id].drawn, 0);
+  assert.equal(room.players.reduce((sum, player) => sum + player.hand.length, 0), 108);
+});
+
 test('race five threes outrank the two-joker rocket without changing classic rules', () => {
   const deck = makeDeck('race'), threes = deck.filter(card => card.rank === 3).slice(0, 5);
   const rocket = [deck[52], deck[53]];
@@ -70,7 +105,7 @@ test('race five threes outrank the two-joker rocket without changing classic rul
   assert.equal(findClosestSelection([...threes, deck[52]], classify(rocket, 'race'), 'race').length, 5);
 });
 
-test('race recycles discards, keeps 108 physical cards, and finishes at 30 played cards', async t => {
+test('race recycles discards, keeps 108 physical cards, and finishes at 36 played cards', async t => {
   const { players, room, ok } = await setup(t);
   const owner = room.players[room.turn], client = players.find(item => item.id === owner.id);
   await ok(client, 'play', { cards: [1] });
@@ -78,10 +113,10 @@ test('race recycles discards, keeps 108 physical cards, and finishes at 30 playe
   const pair = findHint(owner.hand, { type: 'pair', rank: 2, chain: 1, size: 2 }, 'race');
   assert.equal(pair.length, 2);
   room.discardPile.push(...room.drawPile.splice(0, room.drawPile.length - 1));
-  owner.playedCount = 27;
+  owner.playedCount = 33;
   await ok(client, 'play', { cards: pair.map(card => card.id) });
   assert.equal(owner.hand.length, 18);
-  assert.equal(owner.playedCount, 29);
+  assert.equal(owner.playedCount, 35);
   assert.ok(room.drawPile.length > 0);
   const physical = [...room.players.flatMap(player => player.hand), ...room.drawPile, ...room.discardPile];
   assert.equal(physical.length, 108);
@@ -89,7 +124,7 @@ test('race recycles discards, keeps 108 physical cards, and finishes at 30 playe
   clearTimeout(room.timer); room.actionAt = 0; room.turn = room.players.indexOf(owner); room.lastPlay = null;
   await ok(client, 'play', { cards: [owner.hand[0].id] });
   assert.equal(room.phase, 'finished'); assert.equal(room.result.winnerId, owner.id);
-  assert.equal(owner.playedCount, 30); assert.equal(owner.hand.length, 18);
+  assert.equal(owner.playedCount, 36); assert.equal(owner.hand.length, 18);
   assert.equal(owner.score, 1); assert.ok(room.players.filter(player => player !== owner).every(player => player.score === 0));
   await until(() => players.every(player => player.state.phase === 'finished'));
   for (const player of players) await ok(player, 'ready', { ready: true });
@@ -97,10 +132,12 @@ test('race recycles discards, keeps 108 physical cards, and finishes at 30 playe
   assert.ok(room.players.every(player => player.playedCount === 0 && player.hand.length === 18));
 });
 
-test('race bots can play a full round with a fixed 18-card hand', async t => {
+test('race bots can play a full round with pass draws', async t => {
   const { room } = await setup(t, true, { turnMs: 15, botDelayMs: 1 });
   await until(() => room.phase === 'finished', 15000);
-  assert.ok(room.players.some(player => player.playedCount >= 30));
-  assert.ok(room.players.every(player => player.hand.length === 18));
+  assert.ok(room.players.some(player => player.playedCount >= 36));
+  assert.ok(room.players.every(player => player.hand.length >= 18));
+  const physical = [...room.players.flatMap(player => player.hand), ...room.drawPile, ...room.discardPile];
+  assert.equal(physical.length, 108);
   assert.equal(room.players.reduce((sum, player) => sum + player.score, 0), 1);
 });

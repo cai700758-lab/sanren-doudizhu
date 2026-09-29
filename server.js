@@ -5,7 +5,7 @@ import { networkInterfaces } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { Server } from 'socket.io';
-import { makeDeck, sortCards, classify, beats, MODES, modeRules, isSkillMode, isRaceMode } from './lib/game.js';
+import { makeDeck, sortCards, classify, beats, MODES, modeRules, isSkillMode, isRaceMode, RACE_TARGET } from './lib/game.js';
 import { chooseBotBid, chooseBotPlay } from './lib/bot.js';
 import { SKILLS, SKILL_IDS, applySkill, chooseSkillCard, resolveWildCards, wildHands, canUpgrade } from './lib/skills.js';
 
@@ -40,7 +40,7 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
       hostId: room.hostId, round: room.round, turnId: room.players[room.turn]?.id,
       landlordId: room.landlordId, highestBid: room.highestBid, multiplier: room.multiplier,
       deadline: room.deadline, actionAt: room.actionAt || 0, serverNow: Date.now(), bottom: room.landlordId ? room.bottom : [],
-      drawCount: room.drawPile?.length || 0, openingLead: Boolean(room.openingLead),
+      drawCount: room.drawPile?.length || 0, discardCount: room.discardPile?.length || 0, openingLead: Boolean(room.openingLead),
       lastPlay: room.lastPlay, tablePlays: room.tablePlays || {}, dealId: room.dealId || 0,
       tablePasses: room.tablePasses || {}, result: room.result, log: room.log, skillEvent: room.skillEvent || null,
       skillEvents: room.skillEvents || [],
@@ -171,18 +171,22 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
     });
     room.phase = 'finished'; room.actionAt = 0;
     room.result = { winnerId: winner.id, race: true, deltas };
-    log(room, `${winner.name}累计打出${winner.playedCount}张牌，率先达到30张，获胜。`);
+    log(room, `${winner.name}累计打出${winner.playedCount}张牌，率先达到${RACE_TARGET}张，获胜。`);
   }
   function drawRaceCards(room, player, count) {
+    let drawn = 0;
     for (let i = 0; i < count; i++) {
       if (!room.drawPile.length) {
         room.drawPile = room.discardPile.splice(0);
+        if (!room.drawPile.length) break;
         for (let j = room.drawPile.length - 1; j > 0; j--) { const k = randomInt(j + 1); [room.drawPile[j], room.drawPile[k]] = [room.drawPile[k], room.drawPile[j]]; }
         log(room, '抽牌堆已用完，弃牌重新洗入抽牌堆。');
       }
       player.hand.push(room.drawPile.pop());
+      drawn++;
     }
     player.hand = sortCards(player.hand);
+    return drawn;
   }
   function recordSkillEvent(room, p, skillId, extra = {}) {
     // Only public effects travel to other seats; card faces and draft choices stay private.
@@ -209,7 +213,7 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
   function play(room, p, ids, auto = false, assignments = {}) {
     if (room.phase !== 'playing' || room.players[room.turn] !== p) fail('还没轮到你出牌。');
     if (p.skill?.choices) fail('请先完成技能选牌。');
-    if (!Array.isArray(ids) || !ids.length || ids.length > modeRules(room.mode).maxHand || new Set(ids).size !== ids.length) fail('请选择要出的牌。');
+    if (!Array.isArray(ids) || !ids.length || ids.length > (isRaceMode(room.mode) ? p.hand.length : modeRules(room.mode).maxHand) || new Set(ids).size !== ids.length) fail('请选择要出的牌。');
     let cards = ids.map(id => p.hand.find(c => c.id === id));
     if (cards.some(c => !c)) fail('只能打出自己手中的牌。');
     cards = resolveWildCards(cards, assignments);
@@ -229,8 +233,8 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
       p.playedCount += cards.length;
       room.discardPile.push(...cards);
       drawRaceCards(room, p, cards.length);
-      log(room, `${p.name}${auto ? '超时，自动打出' : '打出'}${combo.name}${cards.length}张，累计 ${p.playedCount}/30。`);
-      if (p.playedCount >= 30) return finishRace(room, p);
+      log(room, `${p.name}${auto ? '超时，自动打出' : '打出'}${combo.name}${cards.length}张，累计 ${p.playedCount}/${RACE_TARGET}。`);
+      if (p.playedCount >= RACE_TARGET) return finishRace(room, p);
       room.turn = (room.turn + 1) % modeRules(room.mode).players;
       schedule(room, actionDelayMs * (['bomb', 'rocket', 'superBomb'].includes(combo.type) ? 1.8 : 1));
       return;
@@ -244,9 +248,11 @@ export function createGameServer({ turnMs = TURN_MS, botDelayMs = 2200, dealDela
     if (room.phase !== 'playing' || room.players[room.turn] !== p) fail('还没轮到你。');
     if (p.skill?.choices) fail('请先完成技能选牌。');
     if (!room.lastPlay || room.lastPlay.playerId === p.id) fail('新一轮由你领出，不能不出。');
-    p.lastAction = auto ? '超时 · 不出' : '不出'; log(room, `${p.name}：${p.lastAction}`);
+    const drawn = isRaceMode(room.mode) ? drawRaceCards(room, p, 1) : 0;
+    p.lastAction = `${auto ? '超时 · ' : ''}不出${drawn ? ' · 摸1张' : ''}`;
+    log(room, `${p.name}：${p.lastAction}${isRaceMode(room.mode) && !drawn ? '（牌堆已空）' : ''}`);
     delete room.tablePlays[p.id];
-    room.tablePasses[p.id] = { sequence: ++room.playSequence, auto };
+    room.tablePasses[p.id] = { sequence: ++room.playSequence, auto, drawn };
     room.passes++; room.turn = (room.turn + 1) % modeRules(room.mode).players;
     if (room.passes === modeRules(room.mode).players - 1) {
       room.turn = room.players.findIndex(player => player.id === room.lastPlay.playerId);

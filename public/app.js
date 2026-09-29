@@ -1,4 +1,4 @@
-import { classify as classifyCards, beats, findHint as hintCards, findClosestSelection as closestCards, rankLabel, MODES, modeRules, isFourMode, isSkillMode, isRaceMode } from '/game.js';
+import { classify as classifyCards, beats, findHint as hintCards, findClosestSelection as closestCards, rankLabel, MODES, modeRules, isFourMode, isSkillMode, isRaceMode, RACE_TARGET } from '/game.js';
 import { tableCues } from './table-cues.js';
 import { createTableSound } from './sound.js';
 import { comboEffect, comboArtwork } from './combo-effects.js';
@@ -78,7 +78,7 @@ const skillUI = createSkillUI({ getState: () => state, send, cardHTML, getSelect
 $('#rules-dialog .rules-content').insertAdjacentHTML('afterbegin', '<h3>三人经典</h3>');
 $('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', '<h3>四人经典与四人技能</h3><p>两副牌共 108 张，每人 25 张，地主拿 8 张底牌后共 33 张。一位地主对抗三位农民，任一农民出完即为农民阵营获胜。全部准备才开局；四人都不叫则重新发牌，连续三家不出后由上一位出牌者领出。</p><p>可出单张、对子、三张、三带二、顺子、连对、飞机及飞机带对子。不能三带一、飞机带单或四带二；飞机翅膀为不同点数的对子，不能复用主体点数。两个小王或两个大王可作对子，一小王加一大王不能出。四至八张同点数为炸弹，先比张数再比点数；两小王加两大王是最大的四王炸。2 和王不能进入顺子、连对或飞机主体。</p><p>本游戏四人计分：叫分为初始倍数，每个炸弹、四王炸、春天各翻倍；地主得失三份积分，每位农民一份。八张炸弹和四王炸不会直接判胜，没有农民出炸数量限制。四人技能在上述四人规则下，每人额外获得一个技能。</p>');
 $('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', `<h3>技能模式</h3><p>建房时选择技能模式。每人发牌时随机获得一个技能，可能与其他玩家相同。只能在自己的出牌回合使用，每局一次；使用后继续出牌，回合计时不重置。</p><ul>${Object.values(SKILLS).map(skill => `<li><strong>${skill.name}</strong>：${skill.description}</li>`).join('')}</ul><p>随机牌来自完整的 54 张牌，包含大小王，可以与已有牌重复。万能牌可替代大小王，仍需组成合法牌型；炸弹按当前人数的牌型规则判定。赠牌、弃小牌或顺手牵羊使任一玩家清空手牌时，该玩家直接获胜。四选一的候选牌仅本人可见，超时会选第一张并继续托管。</p>`);
-$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', '<h3>三人竞速</h3><p>三人各自为战。开局只洗第一副牌，三人各得18张；持有第一副红桃3的玩家先出，首手必须包含这张牌。没有叫分、地主和技能。每次打出几张，就从第二副牌的抽牌堆补回几张，手牌保持18张；抽牌堆用完后，弃牌重新洗入抽牌堆。最先累计打出30张牌的玩家获胜。</p><p>牌型和三人经典一致，包含三带一、两王炸。竞速模式额外允许五张3组成“五个三”，大于两王炸，是最大牌型。其他五张同点数不作为炸弹。</p>');
+$('#rules-dialog .rules-content').insertAdjacentHTML('beforeend', `<h3>三人竞速</h3><p>三人各自为战。开局只洗第一副牌，三人各得18张；持有第一副红桃3的玩家先出，首手必须包含这张牌。没有叫分、地主和技能。每次打出几张，就从抽牌堆补回几张；选择“不出”可摸一张，手牌因此可能超过18张。抽牌堆用完后，弃牌重新洗入抽牌堆。最先累计打出${RACE_TARGET}张牌的玩家获胜。</p><p>牌型和三人经典一致，包含三带一、两王炸。竞速模式额外允许五张3组成“五个三”，大于两王炸，是最大牌型。其他五张同点数不作为炸弹。</p>`);
 const initialCode = new URLSearchParams(location.search).get('room');
 if (/^\d{6}$/.test(initialCode || '')) $('#room-code').value = initialCode;
 $('#nickname').value = storage.get('sanren-name', true) || '';
@@ -235,7 +235,7 @@ function avatarHTML(p) {
 }
 function portraitHTML(p) {
   if (!isRaceMode(state.mode)) return avatarHTML(p);
-  return `<span class="avatar-progress">${avatarHTML(p)}<span class="race-progress" aria-label="${escape(p.name)}已打出${p.playedCount}张，目标30张"><strong>${p.playedCount}</strong><small>/30</small></span></span>`;
+  return `<span class="avatar-progress">${avatarHTML(p)}<span class="race-progress" aria-label="${escape(p.name)}已打出${p.playedCount}张，目标${RACE_TARGET}张"><strong>${p.playedCount}</strong><small>/${RACE_TARGET}</small></span></span>`;
 }
 function opponentHandHTML(p) {
   if (!active() || !p.count) return '<div class="opponent-hand" aria-hidden="true"></div>';
@@ -258,8 +258,8 @@ function render() {
   $('#room-title').textContent = state.code;
   $('#round-label').textContent = `${modeRules(state.mode).name} · ${state.round ? `第 ${String(state.round).padStart(2, '0')} 局 · ${{ waiting: '等待加入', bidding: '叫分中', playing: '对局中', finished: '本局结束' }[state.phase]}` : '等待开局'}`;
   $('.arena').dataset.phase = state.phase;
-  $('#multiplier-label').textContent = isRaceMode(state.mode) ? `先打出30张 · 牌堆 ${state.round ? state.drawCount : '待发牌'}` : state.landlordId ? `当前倍数 × ${state.multiplier}` : `${capacity()} 人 · ${isFourMode(state.mode) ? 108 : 54} 张牌`;
-  $('.sidebar-note p').textContent = isRaceMode(state.mode) ? '每回合 45 秒。超时自动不出；领出时自动打一张牌。每打出一张，就补回一张。' : '每回合 45 秒。超时自动不叫或不出，领出时自动打一张最小牌。';
+  $('#multiplier-label').textContent = isRaceMode(state.mode) ? `先打出${RACE_TARGET}张 · 牌堆 ${state.round ? state.drawCount : '待发牌'}` : state.landlordId ? `当前倍数 × ${state.multiplier}` : `${capacity()} 人 · ${isFourMode(state.mode) ? 108 : 54} 张牌`;
+  $('.sidebar-note p').textContent = isRaceMode(state.mode) ? '每回合 45 秒。出牌后按张数补牌；不出时摸一张。超时自动不出并摸牌，领出时自动打一张。' : '每回合 45 秒。超时自动不叫或不出，领出时自动打一张最小牌。';
   const index = state.players.findIndex(p => p.id === state.me);
   // Turn order is self → right → left; consistent on every device.
   const right = state.players[(index + 1) % capacity()];
@@ -299,7 +299,8 @@ function renderPlayedCards(left, right, top) {
     zone.classList.toggle('has-pass', Boolean(passed));
     zone.classList.toggle('revealed-hand', Boolean(revealed));
     if (passed) {
-      zone.innerHTML = `<strong class="pass-label">不出</strong>${passed.auto ? '<span class="play-caption">超时自动不出</span>' : ''}`;
+      const passDetail = [passed.auto ? '超时自动不出' : '', isRaceMode(state.mode) ? passed.drawn ? '摸 1 张' : '牌堆已空' : ''].filter(Boolean).join(' · ');
+      zone.innerHTML = `<strong class="pass-label">不出</strong>${passDetail ? `<span class="play-caption">${passDetail}</span>` : ''}`;
       continue;
     }
     if (!revealed && (!play || state.phase !== 'playing')) { zone.innerHTML = ''; continue; }
@@ -326,7 +327,7 @@ function renderActions() {
     message = me().ready ? '已准备' : '';
     if (state.phase === 'finished') {
       const delta = state.result.deltas.find(d => d.id === state.me).delta;
-      message = isRaceMode(state.mode) ? `${state.players.find(p => p.id === state.result.winnerId).name}率先打出30张 · 已准备 ${state.players.filter(p => p.ready).length}/${capacity()}` : `${delta > 0 ? '获胜 +' : '本局 '}${delta} 分 · 已准备 ${state.players.filter(p => p.ready).length}/${capacity()}`;
+      message = isRaceMode(state.mode) ? `${state.players.find(p => p.id === state.result.winnerId).name}率先打出${RACE_TARGET}张 · 已准备 ${state.players.filter(p => p.ready).length}/${capacity()}` : `${delta > 0 ? '获胜 +' : '本局 '}${delta} 分 · 已准备 ${state.players.filter(p => p.ready).length}/${capacity()}`;
     }
   } else if (state.phase === 'bidding') {
     message = myTurn() ? '轮到你叫分' : `等待 ${state.players.find(p => p.id === state.turnId).name} 叫分`;
@@ -335,7 +336,8 @@ function renderActions() {
     message = myTurn() ? (state.lastPlay ? '轮到你出牌' : '轮到你领出') : `等待 ${state.players.find(p => p.id === state.turnId).name} 出牌`;
     const selectedCards = effectiveHand().filter(c => selected.has(c.id));
     const valid = beats(classify(selectedCards), state.lastPlay?.combo) && (!state.openingLead || selectedCards.some(card => card.id === 1));
-    html = button('pass', '不出', false, !myTurn() || !state.lastPlay) + button('hint', '提示', false, !myTurn()) + button('clear', '重选', false, !selected.size) + button('play', '出牌', true, !myTurn() || !valid);
+    const canDrawOnPass = (state.drawCount || 0) + (state.discardCount || 0) > 0;
+    html = button('pass', isRaceMode(state.mode) && canDrawOnPass ? '不出+1' : '不出', false, !myTurn() || !state.lastPlay) + button('hint', '提示', false, !myTurn()) + button('clear', '重选', false, !selected.size) + button('play', '出牌', true, !myTurn() || !valid);
   }
   $('#actions').innerHTML = html;
   $('#turn-message').textContent = connected ? message : '连接中，恢复后继续对局';
@@ -348,7 +350,7 @@ function renderSelection() {
   message.classList.remove('invalid');
   if (me().skill?.pending) { message.textContent = '请点击「选牌」完成四选一'; return; }
   if (state.phase !== 'playing' || !selected.size) {
-    message.textContent = state.phase === 'playing' ? state.openingLead && myTurn() ? '首手须包含红桃3' : isRaceMode(state.mode) ? `已打 ${me().playedCount}/30 · 每出一张补一张` : '点击或滑动选牌，再次选中取消' : state.phase === 'finished' ? isRaceMode(state.mode) ? `${state.players.find(p => p.id === state.result.winnerId).name}获胜 · 率先打出30张` : `${state.result.landlordWon ? '地主' : '农民'}获胜${state.result.spring ? ' · 春天翻倍' : ''} · ${state.result.multiplier} 倍` : '';
+    message.textContent = state.phase === 'playing' ? state.openingLead && myTurn() ? '首手须包含红桃3' : isRaceMode(state.mode) ? `已打 ${me().playedCount}/${RACE_TARGET} · ${(state.drawCount || 0) + (state.discardCount || 0) ? '不出摸1张' : '牌堆已空'}` : '点击或滑动选牌，再次选中取消' : state.phase === 'finished' ? isRaceMode(state.mode) ? `${state.players.find(p => p.id === state.result.winnerId).name}获胜 · 率先打出${RACE_TARGET}张` : `${state.result.landlordWon ? '地主' : '农民'}获胜${state.result.spring ? ' · 春天翻倍' : ''} · ${state.result.multiplier} 倍` : '';
     return;
   }
   const combo = classify(effectiveHand().filter(c => selected.has(c.id)));
@@ -363,6 +365,7 @@ function renderHand() {
   endSelectionGesture(false);
   const hand = ascending(effectiveHand());
   const skillMode = isSkillMode(state.mode);
+  const raceMode = isRaceMode(state.mode);
   const four = isFourMode(state.mode);
   const landscape = landscapeTable.matches;
   const mobile = window.innerWidth < 600;
@@ -371,7 +374,8 @@ function renderHand() {
   const shortPhone = mobile && window.innerHeight < 760;
   const shortDesktop = !mobile && window.innerHeight < 800;
   const tightHand = skillMode && window.innerWidth < 1000;
-  const doubleRow = skillMode && (four || hand.length > 20);
+  const handCapacity = raceMode ? Math.max(18, hand.length) : modeRules(state.mode).maxHand;
+  const doubleRow = skillMode && (four || hand.length > 20) || raceMode && hand.length > 18;
   container.classList.toggle('multi-row-skill', landscape && doubleRow);
   const rowGap = landscape ? (doubleRow ? 2 : 0) : shortPhone ? (four && skillMode ? 2 : 4) : compact ? (mobile ? 8 : 6) : (mobile ? 20 : 12);
   const topSpace = landscape ? (doubleRow ? 6 : 10) : shortPhone ? (four && skillMode ? 4 : 8) : compact ? 12 : 24;
@@ -381,8 +385,8 @@ function renderHand() {
   const handStyle = getComputedStyle(container);
   const width = container.clientWidth - parseFloat(handStyle.paddingLeft) - parseFloat(handStyle.paddingRight) - 4;
   const minStep = mobile ? (skillMode ? 17 : 22) : (skillMode || four ? 25 : 30);
-  const rowSize = landscape ? (doubleRow ? Math.ceil(modeRules(state.mode).maxHand / 2) : modeRules(state.mode).maxHand) : four && mobile ? (skillMode ? Math.ceil(modeRules(state.mode).maxHand / 2) : 17) : Math.max(1, Math.min(mobile ? (skillMode ? 14 : 10) : (four ? 33 : skillMode ? 28 : 20), Math.floor((width - cardWidth) / minStep) + 1));
-  container.style.height = `${topSpace + Math.ceil(modeRules(state.mode).maxHand / rowSize) * (cardHeight + rowGap)}px`;
+  const rowSize = landscape ? (doubleRow ? Math.ceil(handCapacity / 2) : handCapacity) : four && mobile ? (skillMode ? Math.ceil(handCapacity / 2) : 17) : Math.max(1, Math.min(mobile ? (skillMode ? 14 : raceMode && hand.length > 20 ? 12 : 10) : (four ? 33 : skillMode ? 28 : 20), Math.floor((width - cardWidth) / minStep) + 1));
+  container.style.height = `${topSpace + Math.ceil(handCapacity / rowSize) * (cardHeight + rowGap)}px`;
   if (!hand.length) { container.innerHTML = `<div class="hand-placeholder">${state.phase === 'finished' ? '手牌已出完' : '等待发牌'}</div>`; return; }
   const rows = [];
   for (let i = 0; i < hand.length; i += rowSize) rows.push(hand.slice(i, i + rowSize));
@@ -465,7 +469,7 @@ function presentTableCues(previous, next) {
     } else if (cue.kind === 'win' || cue.kind === 'lose') {
       cueLater(() => {
         tableSound.play(cue.kind); reactAtSeat(cue.playerId, 'win');
-        eventBanner(cue.kind, cue.kind === 'win' ? '胜利' : '本局惜败', isRaceMode(next.mode) ? `${next.players.find(p => p.id === next.result.winnerId).name}率先打出30张` : `${next.result.landlordWon ? '地主' : '农民'}获胜${next.result.spring ? ' · 春天' : ''}`, isRaceMode(next.mode) ? '' : `${cue.delta > 0 ? '+' : ''}${cue.delta} 分`);
+        eventBanner(cue.kind, cue.kind === 'win' ? '胜利' : '本局惜败', isRaceMode(next.mode) ? `${next.players.find(p => p.id === next.result.winnerId).name}率先打出${RACE_TARGET}张` : `${next.result.landlordWon ? '地主' : '农民'}获胜${next.result.spring ? ' · 春天' : ''}`, isRaceMode(next.mode) ? '' : `${cue.delta > 0 ? '+' : ''}${cue.delta} 分`);
         for (const score of document.querySelectorAll('.score-value')) moveCard(score, [{ transform: 'scale(.8)', opacity: .4 }, { transform: 'scale(1.15)', offset: .65 }, { transform: 'scale(1)', opacity: 1 }], { duration: 650 });
       }, emphasisDelay || 450);
     }
@@ -474,7 +478,7 @@ function presentTableCues(previous, next) {
 
 function renderScores() {
   $('#player-count').textContent = `${state.players.length} / ${capacity()}`;
-  $('#scores').innerHTML = state.players.map(p => `<div class="score-row">${avatarHTML(p)}<div><div class="player-name">${escape(p.name)}${p.id === state.me ? ' · 你' : ''}</div><small>${role(p)} · ${isRaceMode(state.mode) ? `已打 ${p.playedCount}/30 · ` : ''}${p.connected ? '在线' : '离线'}</small></div><span class="score-value">${isRaceMode(state.mode) ? `${p.score}胜` : `${p.score > 0 ? '+' : ''}${p.score}`}</span></div>`).join('');
+  $('#scores').innerHTML = state.players.map(p => `<div class="score-row">${avatarHTML(p)}<div><div class="player-name">${escape(p.name)}${p.id === state.me ? ' · 你' : ''}</div><small>${role(p)} · ${isRaceMode(state.mode) ? `已打 ${p.playedCount}/${RACE_TARGET} · ` : ''}${p.connected ? '在线' : '离线'}</small></div><span class="score-value">${isRaceMode(state.mode) ? `${p.score}胜` : `${p.score > 0 ? '+' : ''}${p.score}`}</span></div>`).join('');
   $('#game-log').innerHTML = state.log.map(text => `<li>${escape(text)}</li>`).join('');
   $('#game-log').scrollTop = $('#game-log').scrollHeight;
 }
@@ -647,8 +651,14 @@ function flyToCard(node, source, delay = 0, duration = 700) {
 }
 function animateRaceDraw(previous, next, origins, motion = true) {
   if (!isRaceMode(next.mode)) return;
-  const actor = next.players.find(player => player.playedCount > (previous.players.find(old => old.id === player.id)?.playedCount || 0));
+  const actor = next.players.find(player => {
+    const old = previous.players.find(item => item.id === player.id);
+    const played = player.playedCount > (old?.playedCount || 0);
+    const passed = next.tablePasses?.[player.id];
+    return played || player.count > (old?.count || 0) && passed?.sequence !== previous.tablePasses?.[player.id]?.sequence;
+  });
   if (!actor) return;
+  const played = actor.playedCount > (previous.players.find(old => old.id === actor.id)?.playedCount || 0);
   if (actor.id === next.me) {
     const oldIds = new Set(previous.players.find(player => player.id === next.me).hand.map(card => card.id));
     const playedIds = new Set(next.tablePlays?.[next.me]?.cards.map(card => card.id) || []);
@@ -682,7 +692,8 @@ function animateRaceDraw(previous, next, origins, motion = true) {
     moveCard(seat?.querySelector('.opponent-hand'), [{ filter: 'brightness(1)' }, { filter: 'brightness(1.35)', offset: .45 }, { filter: 'brightness(1)' }], { duration: 600 });
   }
   const counter = [...document.querySelectorAll('.player-info')].find(node => node.dataset.playerId === actor.id)?.querySelector('.race-progress');
-  if (motion) moveCard(counter, [{ transform: 'scale(1)', filter: 'brightness(1)' }, { transform: 'scale(1.22)', filter: 'brightness(1.25)', offset: .45 }, { transform: 'scale(1)', filter: 'brightness(1)' }], { duration: 760 });
+  if (motion && played) moveCard(counter, [{ transform: 'scale(1)', filter: 'brightness(1)' }, { transform: 'scale(1.22)', filter: 'brightness(1.25)', offset: .45 }, { transform: 'scale(1)', filter: 'brightness(1)' }], { duration: 760 });
+  if (motion) moveCard($('#bottom-cards .draw-count'), [{ transform: 'scale(1)' }, { transform: 'scale(1.18)', offset: .45 }, { transform: 'scale(1)' }], { duration: 620 });
 }
 function animateTableUpdate(previous, next, origins) {
   if (!previous || !next || previous.code !== next.code || document.visibilityState !== 'visible') return;
@@ -758,7 +769,14 @@ document.addEventListener('click', async event => {
       renderActions();
     }
   }
-  if (action === 'pass') { if (await send('pass')) { selected.clear(); renderHand(); renderActions(); } }
+  if (action === 'pass') {
+    const revision = state.revision;
+    if (await send('pass')) {
+      selected.clear();
+      if (state.revision === revision) renderHand(); else syncSelection();
+      renderActions();
+    }
+  }
   if (action === 'clear') { selected.clear(); renderHand(); renderActions(); }
   if (action === 'hint') {
     const hint = state.openingLead ? [me().hand.find(card => card.id === 1)] : isSkillMode(state.mode) ? findSkillHint(me().hand, state.lastPlay?.combo, state.mode) : findHint(me().hand, state.lastPlay?.combo);
